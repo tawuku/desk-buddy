@@ -18,7 +18,7 @@ fully local voice assistant behind it. No cloud, no account, no subscription.
 ## Install
 
 ```bash
-git clone https://github.com/<you>/desk-buddy.git
+git clone https://github.com/tawuku/desk-buddy.git
 cd desk-buddy
 ./install.sh --pet-only      # just the pet
 # or
