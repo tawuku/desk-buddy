@@ -1,0 +1,67 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Runtime data
+logs/*
+!logs/.gitkeep
+database/*.db
+database/*.sqlite*
+
+# Local model weights (large binaries, never committed)
+models/*.gguf
+models/*.bin
+models/xtts/
+
+# Third-party engine checkout: has its own git history, not vendored here
+engines/ps-ai-assist/
+
+# OpenClaw Gateway state (credentials, sessions, per-agent memory)
+database/openclaw/
+
+# Desktop pet: saved window position, and Node/Electron deps (~300MB, fetched
+# fresh with `npm install` -- see computer/pet/README.md)
+database/pet/
+# Goals, people and moods you log (computer/pet/goals.html) -- personal
+database/goals.json
+# What you ask JARVIS to remember, and voice reminders/timers -- personal
+database/memory.json
+database/reminders.json
+computer/pet/node_modules/
+
+# OS/editor artifacts
+.DS_Store
+.idea/
+.vscode/
+
+# cached pre-rendered voice greeting (computer/voice/wake_listener.py)
+computer/voice/cache/
+
+# locally built AVX2 llama.cpp (see models/run_llama_server.sh)
+# locally built AVX2 llama-server / whisper-server / whisper-cli
+engines/bin/
+
+# --- desk-buddy public repo: personal files stay on this Mac ---------------
+# Your own config (template: config/jarvis_sources.example.json) and install mode
+config/jarvis_sources.json
+config/mode
+# Personal build history / notes / task list
+DEVELOPMENT_LOG.md
+PERSONAL_README.md
+TASKS.md
+# Downloaded or built by install.sh
+models/
+engines/bin/
+computer/boot/bootkey
+computer/boot/com.jarvis.boot.plist
+computer/pa/node_modules/
+# Local tooling
+.claude/
+*.tmp

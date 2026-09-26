@@ -1,0 +1,36 @@
+{
+  "_comment": "What JARVIS's voice skills can see. Read by computer/voice/skills.py. Copy to config/jarvis_sources.json (the installer does) and edit: your name, your city, your news feeds and the project folders JARVIS should know about. Paths may start with ~. A project's 'name_filter' limits it to files whose name contains that text; 'aliases' = how speech recognition tends to hear the name; 'about' = short background JARVIS gets whenever that project comes up. News feeds' 'lang': only 'en' headlines are read aloud (Piper speaks English).",
+  "user_name": "",
+  "city": {
+    "name": "Berlin",
+    "lat": 52.52,
+    "lon": 13.405,
+    "timezone": "Europe/Berlin"
+  },
+  "news_feeds": [
+    {
+      "name": "BBC World",
+      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "lang": "en"
+    }
+  ],
+  "email": {
+    "source": "mail.app",
+    "max_messages": 8
+  },
+  "projects": [
+    {
+      "name": "My project",
+      "paths": [
+        "~/Documents/My project"
+      ],
+      "aliases": [],
+      "about": "One sentence about what this project is and what you're focusing on."
+    }
+  ],
+  "recent_files_folders": [
+    "~/Documents",
+    "~/Desktop",
+    "~/Downloads"
+  ]
+}

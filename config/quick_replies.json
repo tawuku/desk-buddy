@@ -1,0 +1,633 @@
+{
+  "_comment": "Instant replies for everyday talk -- no language model involved. Read by computer/voice/quick.py. 'match' phrases are compared to what you said after lower-casing, removing punctuation and filler words (hey, jarvis, please, ok, so, just, buddy...), so 'Goodnight, Jarvis!' matches 'goodnight'. 'say' = replies (one picked at random; {name} = your name); they're pre-recorded in JARVIS's voice. 'end' = end the conversation afterwards (back to waiting for 'hey Jarvis'). 'handler' = a built-in live reply or action instead of/in addition to 'say': time, date, day, weather, repeat, volume_up, volume_down, mute, unmute, briefing_ready. Edit freely -- restart voice wake (PA > Voice wake > Restart) to apply. 'defer_after_question' = if JARVIS just asked you a real question, a bare 'yes'/'good' goes to the model as your answer instead. 'offer' = after this reply, a 'yes' runs that (only 'briefing' for now). Conversation enders ('end': true -- JARVIS says its line and goes back to standby): besides exact matches, a short utterance (up to 8 words) that contains one of their phrases also ends it, unless it asks for something too (see quick.py _closer).",
+  "intents": [
+    {
+      "name": "goodnight",
+      "match": [
+        "goodnight",
+        "good night",
+        "night night",
+        "nighty night",
+        "im going to bed",
+        "im going to sleep",
+        "time for bed",
+        "going to bed",
+        "see you tomorrow"
+      ],
+      "say": [
+        "Good night, {name}. Sleep well.",
+        "Night, {name}. Get some rest, I'll be here tomorrow.",
+        "Sleep well, {name}. Talk tomorrow."
+      ],
+      "end": true
+    },
+    {
+      "name": "sleep",
+      "match": [
+        "go to sleep",
+        "sleep",
+        "you can sleep",
+        "go sleep",
+        "sleep now",
+        "stop listening",
+        "thats all",
+        "thats it",
+        "that will be all",
+        "thats all for now",
+        "im done",
+        "we are done",
+        "were done",
+        "dismissed",
+        "go back to sleep",
+        "rest",
+        "take a break",
+        "standby",
+        "stand by",
+        "go to sleep now",
+        "you can go to sleep",
+        "go to standby",
+        "go on standby",
+        "thats all thanks",
+        "thats all thank you",
+        "nothing else",
+        "no thats all",
+        "no thats it",
+        "thats everything",
+        "that is all",
+        "i dont need anything",
+        "i dont need anything else",
+        "we are good",
+        "were good",
+        "thats enough",
+        "enough for now",
+        "you can stop",
+        "you can stop now",
+        "stop talking",
+        "stop now",
+        "go quiet",
+        "be quiet now",
+        "sleep mode",
+        "good to sleep",
+        "got to sleep",
+        "go to sleep jarvis",
+        "you can go to bed",
+        "go to bed",
+        "sleep jarvis",
+        "back to sleep",
+        "you can rest",
+        "you can rest now",
+        "thats all for today",
+        "thats it for now",
+        "thats it for today"
+      ],
+      "say": [
+        "Alright, I'll be here if you need me.",
+        "Okay. Just say hey Jarvis when you need me.",
+        "Sure thing. Going quiet."
+      ],
+      "end": true
+    },
+    {
+      "name": "goodbye",
+      "match": [
+        "bye",
+        "goodbye",
+        "good bye",
+        "bye bye",
+        "see you",
+        "see you later",
+        "later",
+        "catch you later",
+        "talk later",
+        "talk to you later",
+        "im heading out",
+        "im leaving",
+        "im off",
+        "gotta go",
+        "i have to go",
+        "i got to go"
+      ],
+      "say": [
+        "See you later, {name}.",
+        "Take care, {name}. I'll be here.",
+        "Later, {name}. Have a good one."
+      ],
+      "end": true
+    },
+    {
+      "name": "stop",
+      "match": [
+        "stop",
+        "be quiet",
+        "quiet",
+        "shut up",
+        "shush",
+        "silence",
+        "enough",
+        "cancel",
+        "never mind",
+        "nevermind",
+        "forget it",
+        "forget about it",
+        "nothing",
+        "no nothing",
+        "its nothing",
+        "nothing never mind",
+        "stop it",
+        "please stop",
+        "stop please",
+        "okay stop",
+        "ok stop",
+        "stop jarvis",
+        "hold on stop"
+      ],
+      "say": [
+        "Okay.",
+        "No problem."
+      ],
+      "end": true
+    },
+    {
+      "name": "wake_up",
+      "match": [
+        "wake up",
+        "are you awake",
+        "you awake",
+        "are you there",
+        "you there",
+        "are you listening",
+        "can you hear me",
+        "hello",
+        "hi",
+        "hey",
+        "yo",
+        "hello there",
+        "hi there",
+        "anybody there",
+        "are you on",
+        "you up"
+      ],
+      "say": [
+        "I'm here. What's up?",
+        "Wide awake. What do you need?",
+        "Yep, I'm listening.",
+        "I'm here, {name}. Go ahead."
+      ]
+    },
+    {
+      "name": "good_morning",
+      "match": [
+        "good morning",
+        "morning",
+        "morning jarvis",
+        "top of the morning"
+      ],
+      "say": [
+        "Good morning, {name}! Want to hear your briefing?",
+        "Morning, {name}. Sleep well? Your briefing's ready whenever you are."
+      ],
+      "handler": "briefing_ready",
+      "offer": "briefing"
+    },
+    {
+      "name": "good_afternoon",
+      "match": [
+        "good afternoon",
+        "afternoon"
+      ],
+      "say": [
+        "Good afternoon, {name}. How's the day going?",
+        "Afternoon! What can I do for you?"
+      ]
+    },
+    {
+      "name": "good_evening",
+      "match": [
+        "good evening",
+        "evening"
+      ],
+      "say": [
+        "Good evening, {name}. How was your day?",
+        "Evening, {name}. What's up?"
+      ]
+    },
+    {
+      "name": "how_are_you",
+      "match": [
+        "how are you",
+        "how are you doing",
+        "how are you today",
+        "hows it going",
+        "how is it going",
+        "whats up",
+        "sup",
+        "wassup",
+        "how do you do",
+        "how you doing",
+        "how have you been",
+        "you good",
+        "are you okay",
+        "are you ok",
+        "how are things"
+      ],
+      "say": [
+        "Doing great, thanks for asking. How about you?",
+        "All good on my end. How are you doing?",
+        "Pretty good! Running smooth today. And you?"
+      ]
+    },
+    {
+      "name": "im_good",
+      "match": [
+        "im good",
+        "im fine",
+        "im great",
+        "im doing good",
+        "im doing well",
+        "im doing great",
+        "not bad",
+        "all good",
+        "pretty good",
+        "im okay",
+        "im ok",
+        "good",
+        "great",
+        "fine",
+        "doing good",
+        "doing well"
+      ],
+      "say": [
+        "Glad to hear it. What's on your mind?",
+        "Nice. Anything I can help with?",
+        "Good stuff. What are we working on?"
+      ],
+      "defer_after_question": true
+    },
+    {
+      "name": "im_tired",
+      "match": [
+        "im tired",
+        "im so tired",
+        "im exhausted",
+        "im sleepy",
+        "long day",
+        "it was a long day",
+        "what a day",
+        "im stressed",
+        "im stressed out"
+      ],
+      "say": [
+        "Sounds like a lot. Maybe take a proper break, you've earned it.",
+        "Ah, rough one. Go easy on yourself tonight.",
+        "Take a breather, {name}. The work will still be here after."
+      ]
+    },
+    {
+      "name": "im_back",
+      "match": [
+        "im back",
+        "i am back",
+        "back again",
+        "im home",
+        "i am home",
+        "honey im home"
+      ],
+      "say": [
+        "Welcome back, {name}.",
+        "Hey, welcome back! What's next?",
+        "Good to have you back."
+      ]
+    },
+    {
+      "name": "thanks",
+      "match": [
+        "thanks",
+        "thank you",
+        "thank you so much",
+        "thanks a lot",
+        "thanks so much",
+        "cheers",
+        "much appreciated",
+        "appreciate it",
+        "i appreciate it",
+        "thx",
+        "ty",
+        "danke",
+        "danke schön",
+        "okay thanks",
+        "ok thanks",
+        "cool thanks",
+        "great thanks",
+        "perfect thanks",
+        "thanks jarvis",
+        "thank you jarvis",
+        "thats ok",
+        "thats okay",
+        "thats fine",
+        "its ok",
+        "its okay",
+        "its fine",
+        "all good thanks",
+        "im good thanks",
+        "that helps",
+        "that helped",
+        "good thanks",
+        "nice thanks",
+        "awesome thanks",
+        "thank you very much",
+        "thanks very much",
+        "thank you so much jarvis",
+        "okay thank you",
+        "ok thank you",
+        "alright thank you",
+        "alright thanks",
+        "perfect thank you",
+        "great thank you"
+      ],
+      "say": [
+        "Anytime. I'll be here.",
+        "You got it. Just say hey Jarvis when you need me.",
+        "Happy to help. Going quiet now.",
+        "No problem at all."
+      ],
+      "end": true
+    },
+    {
+      "name": "praise",
+      "match": [
+        "good job",
+        "well done",
+        "nice",
+        "nice one",
+        "awesome",
+        "perfect",
+        "great job",
+        "youre the best",
+        "you are the best",
+        "love it",
+        "amazing",
+        "brilliant",
+        "cool",
+        "sweet",
+        "excellent",
+        "good work",
+        "nice work"
+      ],
+      "say": [
+        "Thanks! That's what I'm here for.",
+        "Glad that helped.",
+        "Appreciate it."
+      ],
+      "defer_after_question": true
+    },
+    {
+      "name": "acknowledge",
+      "match": [
+        "okay",
+        "ok",
+        "alright",
+        "all right",
+        "got it",
+        "i see",
+        "makes sense",
+        "understood",
+        "sure",
+        "right",
+        "yeah",
+        "yep",
+        "yes",
+        "hmm",
+        "mm",
+        "uh huh"
+      ],
+      "say": [
+        "Mm-hm.",
+        "Sure.",
+        "Anything else?"
+      ],
+      "defer_after_question": true
+    },
+    {
+      "name": "sorry",
+      "match": [
+        "sorry",
+        "my bad",
+        "my mistake",
+        "oops"
+      ],
+      "say": [
+        "No worries at all.",
+        "All good, don't worry about it."
+      ],
+      "defer_after_question": true
+    },
+    {
+      "name": "who_are_you",
+      "match": [
+        "who are you",
+        "what are you",
+        "whats your name",
+        "what is your name",
+        "tell me about yourself",
+        "introduce yourself"
+      ],
+      "say": [
+        "I'm JARVIS, your personal assistant. I run right here on your Mac."
+      ]
+    },
+    {
+      "name": "who_made_you",
+      "match": [
+        "who made you",
+        "who created you",
+        "who built you",
+        "who is your creator"
+      ],
+      "say": [
+        "You did, {name}. With a little help."
+      ]
+    },
+    {
+      "name": "what_can_you_do",
+      "match": [
+        "what can you do",
+        "what do you do",
+        "help",
+        "what are your skills",
+        "what can i ask you",
+        "how can you help me",
+        "what are you capable of"
+      ],
+      "say": [
+        "Quite a bit. Weather, news, your email, web lookups, updates on your projects, a daily briefing, or just talking things through. What do you need?"
+      ]
+    },
+    {
+      "name": "love",
+      "match": [
+        "i love you",
+        "love you",
+        "i like you"
+      ],
+      "say": [
+        "Aw, right back at you, {name}.",
+        "I'm flattered. I'm pretty fond of you too."
+      ]
+    },
+    {
+      "name": "joke",
+      "match": [
+        "tell me a joke",
+        "joke",
+        "say something funny",
+        "make me laugh",
+        "another joke",
+        "tell me another joke",
+        "got any jokes"
+      ],
+      "say": [
+        "Why don't programmers like nature? Too many bugs.",
+        "I told my computer I needed a break. It said, no problem, I'll go to sleep.",
+        "Why did the scarecrow win an award? He was outstanding in his field.",
+        "What do you call a fake noodle? An impasta.",
+        "I'm reading a book about anti-gravity. It's impossible to put down.",
+        "Why did the developer go broke? He used up all his cache."
+      ]
+    },
+    {
+      "name": "time",
+      "match": [
+        "what time is it",
+        "whats the time",
+        "what is the time",
+        "time",
+        "tell me the time",
+        "do you know the time",
+        "what time is it now",
+        "current time",
+        "what time do we have"
+      ],
+      "handler": "time"
+    },
+    {
+      "name": "date",
+      "match": [
+        "whats the date",
+        "what is the date",
+        "whats todays date",
+        "what is todays date",
+        "what date is it",
+        "date",
+        "todays date",
+        "what date is it today"
+      ],
+      "handler": "date"
+    },
+    {
+      "name": "day",
+      "match": [
+        "what day is it",
+        "what day is today",
+        "what day is it today",
+        "which day is it",
+        "what day of the week is it"
+      ],
+      "handler": "day"
+    },
+    {
+      "name": "weather_now",
+      "match": [
+        "whats the weather",
+        "what is the weather",
+        "hows the weather",
+        "how is the weather",
+        "weather",
+        "whats the weather like",
+        "what is the weather like",
+        "weather today",
+        "whats the weather today",
+        "how is the weather today",
+        "hows the weather today",
+        "is it cold outside",
+        "is it warm outside",
+        "whats the temperature",
+        "what is the temperature",
+        "temperature"
+      ],
+      "handler": "weather"
+    },
+    {
+      "name": "repeat",
+      "match": [
+        "repeat",
+        "repeat that",
+        "say that again",
+        "can you repeat that",
+        "what did you say",
+        "come again",
+        "pardon",
+        "sorry what",
+        "what",
+        "huh",
+        "again",
+        "one more time"
+      ],
+      "handler": "repeat"
+    },
+    {
+      "name": "volume_up",
+      "match": [
+        "volume up",
+        "louder",
+        "speak louder",
+        "turn it up",
+        "turn up the volume",
+        "increase the volume",
+        "i cant hear you"
+      ],
+      "say": [
+        "Better?"
+      ],
+      "handler": "volume_up"
+    },
+    {
+      "name": "volume_down",
+      "match": [
+        "volume down",
+        "quieter",
+        "speak quieter",
+        "softer",
+        "turn it down",
+        "turn down the volume",
+        "decrease the volume",
+        "too loud",
+        "youre too loud"
+      ],
+      "say": [
+        "Is this better?"
+      ],
+      "handler": "volume_down"
+    },
+    {
+      "name": "mute",
+      "match": [
+        "mute",
+        "mute the sound",
+        "mute volume"
+      ],
+      "handler": "mute"
+    },
+    {
+      "name": "unmute",
+      "match": [
+        "unmute",
+        "unmute the sound",
+        "sound on"
+      ],
+      "say": [
+        "Sound's back on."
+      ],
+      "handler": "unmute"
+    }
+  ]
+}

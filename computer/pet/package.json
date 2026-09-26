@@ -1,0 +1,13 @@
+{
+  "name": "jarvis-pet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A hovering pixel-art desktop pet that reacts to what's frontmost on your Mac.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.4.3"
+  }
+}

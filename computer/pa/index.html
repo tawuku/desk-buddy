@@ -1,0 +1,301 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:;" />
+<title>PA</title>
+<style>
+  :root {
+    --cyan: #5ad1ff;
+    --cyan-dim: rgba(90, 209, 255, 0.35);
+    --green: #5cffb0;
+    --red: #ff5a5a;
+    --ink: #d8f3ff;
+    --ink-dim: #7f9aa8;
+    --panel: #12171b;
+    --panel-2: #171d22;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #0b0e11;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #app {
+    padding: 18px 20px 24px;
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  h1 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: var(--cyan);
+    text-shadow: 0 0 10px var(--cyan-dim);
+    margin: 0;
+  }
+  #build-hint {
+    font-size: 10px;
+    color: var(--ink-dim);
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .card-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-dim);
+    margin-bottom: 10px;
+  }
+
+  .master-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .master-label {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .master-sub {
+    font-size: 11px;
+    color: var(--ink-dim);
+    margin-top: 2px;
+  }
+
+  /* toggle switch */
+  .switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex: none;
+    cursor: pointer;
+  }
+  .switch input { display: none; }
+  .switch .track {
+    position: absolute;
+    inset: 0;
+    background: #2a3138;
+    border-radius: 999px;
+    transition: background 0.2s ease;
+  }
+  .switch .thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #cfd8dc;
+    transition: transform 0.2s ease, background 0.2s ease;
+  }
+  .switch input:checked + .track {
+    background: var(--cyan);
+    box-shadow: 0 0 10px var(--cyan-dim);
+  }
+  .switch input:checked + .track .thumb,
+  .switch input:checked ~ .thumb {
+    transform: translateX(20px);
+    background: #06121a;
+  }
+  .switch.busy .track { opacity: 0.5; }
+
+  .service-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .service-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4a4a52;
+    flex: none;
+  }
+  .dot.up { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.down { background: #4a4a52; }
+  .service-name {
+    flex: 1;
+    font-size: 12.5px;
+  }
+  .mini-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--ink);
+    font-size: 10.5px;
+    padding: 4px 9px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .mini-btn:hover { border-color: var(--cyan-dim); color: var(--cyan); }
+  .mini-btn:disabled { opacity: 0.4; cursor: default; }
+
+  label.field-label {
+    display: block;
+    font-size: 10.5px;
+    color: var(--ink-dim);
+    margin-bottom: 4px;
+    margin-top: 10px;
+  }
+  label.field-label:first-child { margin-top: 0; }
+  select, input[type="number"] {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--ink);
+    padding: 7px 8px;
+    border-radius: 7px;
+    font-size: 12.5px;
+  }
+  select:focus, input:focus { outline: 1px solid var(--cyan-dim); }
+  input[type="range"] { width: 100%; accent-color: var(--cyan); }
+  .speed-row { display: flex; align-items: center; gap: 8px; }
+  .speed-value { font-size: 11px; color: var(--ink-dim); width: 32px; text-align: right; }
+
+  .apply-btn {
+    margin-top: 12px;
+    width: 100%;
+    background: var(--cyan);
+    color: #06121a;
+    border: none;
+    padding: 8px 0;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .apply-btn:hover { filter: brightness(1.08); }
+  .apply-btn:disabled { opacity: 0.5; cursor: default; }
+  .apply-btn.secondary {
+    background: var(--panel-2);
+    color: var(--ink);
+    border: 1px solid var(--border);
+  }
+
+  .hint {
+    font-size: 10.5px;
+    color: var(--ink-dim);
+    margin-top: 8px;
+    line-height: 1.4;
+  }
+  .hint.warn { color: #ffb454; }
+
+  .row-2 { display: flex; gap: 8px; }
+  .row-2 > * { flex: 1; }
+
+  #toast {
+    position: fixed;
+    left: 20px;
+    right: 20px;
+    bottom: 16px;
+    background: var(--panel-2);
+    border: 1px solid var(--cyan-dim);
+    color: var(--ink);
+    font-size: 11px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+  }
+  #toast.visible { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>PA</h1>
+      <span id="build-hint">JARVIS control</span>
+    </header>
+
+    <div class="card">
+      <div class="master-row">
+        <div>
+          <div class="master-label">JARVIS</div>
+          <div class="master-sub" id="jarvis-sub">Off</div>
+        </div>
+        <label class="switch" id="jarvis-switch">
+          <input type="checkbox" id="jarvis-toggle" />
+          <span class="track"><span class="thumb"></span></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="master-row">
+        <div>
+          <div class="master-label">Desktop pet (HUD)</div>
+          <div class="master-sub">Tray icon + wake panel</div>
+        </div>
+        <label class="switch" id="pet-switch">
+          <input type="checkbox" id="pet-toggle" />
+          <span class="track"><span class="thumb"></span></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Services</div>
+      <div class="service-list" id="service-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Voice</div>
+      <label class="field-label">Voice</label>
+      <select id="voice-speaker"></select>
+      <label class="field-label">Speed</label>
+      <div class="speed-row">
+        <input type="range" id="voice-speed" min="0.5" max="1.8" step="0.05" value="1.0" />
+        <span class="speed-value" id="voice-speed-value">1.0x</span>
+      </div>
+      <div class="row-2">
+        <button class="apply-btn secondary" id="voice-preview">&#9654; Preview</button>
+        <button class="apply-btn" id="voice-apply">Save voice</button>
+      </div>
+      <div class="hint" id="voice-hint">Reading current voice settings...</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Performance</div>
+      <label class="field-label">Model CPU threads</label>
+      <input type="number" id="threads-input" min="1" max="16" />
+      <button class="apply-btn secondary" id="threads-apply">Save (applies next time JARVIS starts)</button>
+      <div class="hint" id="threads-hint"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Advanced</div>
+      <div class="row-2">
+                <button class="apply-btn secondary" id="open-goals">Goals & reminders</button>
+                <button class="apply-btn secondary" id="open-screen">Brief me on all screens</button>
+                <button class="apply-btn secondary" id="open-logs">Open logs</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

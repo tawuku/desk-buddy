@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline';" />
+<title>Reminder</title>
+<!-- A reminder card that pops up above the pet (reminders.js). -->
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; -webkit-user-select: none; }
+  #wrap { padding: 10px 12px 26px; }
+  #wrap.below { padding: 22px 12px 10px; }
+  .card { position: relative; background: rgba(246,246,252,.97); border-radius: 20px; padding: 14px 16px 16px;
+    box-shadow: 0 10px 30px rgba(20,25,60,.22), 0 1px 0 rgba(255,255,255,.8) inset; border: 1px solid rgba(255,255,255,.7);
+    animation: pop .32s cubic-bezier(.2,1.3,.4,1) both; }
+  @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.92); } }
+  .card::after { content: ''; position: absolute; left: 50%; bottom: -8px; width: 16px; height: 16px; background: rgba(246,246,252,.97);
+    transform: translateX(-50%) rotate(45deg); border-radius: 3px; box-shadow: 4px 4px 8px rgba(20,25,60,.08); }
+  .below .card::after { bottom: auto; top: -8px; box-shadow: -3px -3px 6px rgba(20,25,60,.05); }
+  .head { display: flex; align-items: center; gap: 10px; padding-bottom: 11px; border-bottom: 1px solid rgba(40,50,90,.1); }
+  .icon { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 16px; background: #fff3d6;
+    box-shadow: 0 0 0 2px #f6c6d6; }
+  .title { font-weight: 700; font-size: 15px; color: #1d2233; flex: 1; }
+  .x { border: 0; background: none; color: #9aa0b4; font-size: 16px; cursor: pointer; padding: 2px 4px; }
+  .x:hover { color: #1d2233; }
+  .text { margin: 12px 2px 12px; font-size: 14px; font-weight: 600; line-height: 1.4; color: #262b3d; }
+  .buttons { display: flex; gap: 7px; flex-wrap: wrap; }
+  .buttons button { border: 0; border-radius: 12px; padding: 8px 13px; font: 700 13px -apple-system, sans-serif; color: #2e3450;
+    background: #e3e5ef; cursor: pointer; transition: transform .1s, background .15s; }
+  .buttons button:hover { background: #d6d9e6; }
+  .buttons button:active { transform: scale(.95); }
+  .buttons button.primary { background: #3761e6; color: #fff; }
+  .buttons button.primary:hover { background: #2a52d4; }
+  .reply { font-size: 14px; font-weight: 600; color: #3761e6; line-height: 1.4; animation: pop .25s ease both; }
+</style>
+</head>
+<body>
+  <div id="wrap"><div class="card" id="card">
+    <div class="head"><div class="icon" id="icon"></div><div class="title" id="title"></div><button class="x" id="x" title="Dismiss">✕</button></div>
+    <div class="text" id="text"></div>
+    <div class="buttons" id="buttons"></div>
+  </div></div>
+<script>
+  // In a plain browser (no Electron bridge), show a sample card.
+  if (!window.popup) {
+    let cb = null;
+    window.popup = { onCard: (f) => { cb = f; }, act: async (a) => ({ reply: a === 'tired' ? 'Take ten minutes away from the screen and drink some water.' : 'Love that!' }),
+      dismiss: () => {}, resize: () => {} };
+    setTimeout(() => cb && cb({ icon: '😊', title: 'Mood check-in', text: 'How are you feeling right now?',
+      buttons: [{ id: 'great', label: 'Great', primary: true }, { id: 'okay', label: 'Okay' }, { id: 'tired', label: 'Tired' }, { id: 'stressed', label: 'Stressed' }] }), 50);
+  }
+  const $ = (id) => document.getElementById(id);
+  const fit = () => window.popup.resize(document.getElementById('wrap').offsetHeight);
+  let autoClose = null;
+
+  function render(card) {
+    $('wrap').className = card.below ? 'below' : '';
+    $('icon').textContent = card.icon || '✨';
+    $('title').textContent = card.title;
+    $('text').textContent = card.text;
+    $('buttons').innerHTML = '';
+    for (const b of card.buttons || []) {
+      const el = document.createElement('button');
+      el.textContent = b.label;
+      if (b.primary) el.className = 'primary';
+      el.onclick = async () => {
+        clearTimeout(autoClose);
+        const res = await window.popup.act(b.id);
+        if (res && res.card) return render(res.card);
+        if (res && res.reply) {
+          $('buttons').innerHTML = '';
+          const r = document.createElement('div');
+          r.className = 'reply';
+          r.textContent = res.reply;
+          $('buttons').appendChild(r);
+          fit();
+        }
+      };
+      $('buttons').appendChild(el);
+    }
+    fit();
+    // Unanswered cards step aside after a minute.
+    clearTimeout(autoClose);
+    autoClose = setTimeout(() => window.popup.dismiss(), 60000);
+  }
+
+  $('x').onclick = () => window.popup.dismiss();
+  window.popup.onCard(render);
+</script>
+</body>
+</html>

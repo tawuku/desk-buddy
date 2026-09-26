@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:;" />
+<title>JARVIS pet</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 170px;
+    height: 200px;
+    background: transparent;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: grab;
+  }
+  #stage { position: relative; width: 170px; height: 200px; }
+  #man { position: absolute; left: 0; top: 0; width: 170px; height: 200px; }
+  #bubble {
+    position: absolute;
+    left: 50%;
+    top: 4px;
+    transform: translateX(-50%) translateY(6px) scale(.9);
+    max-width: 150px;
+    width: max-content;
+    padding: 5px 9px;
+    font: 600 11px/1.3 -apple-system, "Helvetica Neue", sans-serif;
+    color: #2b2118;
+    background: #fff;
+    border: 1.5px solid #2b2118;
+    border-radius: 11px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  #bubble.show { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  #bubble::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -7px;
+    width: 10px;
+    height: 10px;
+    background: #fff;
+    border-right: 1.5px solid #2b2118;
+    border-bottom: 1.5px solid #2b2118;
+    transform: translateX(-50%) rotate(45deg);
+  }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="man" width="340" height="400"></canvas>
+    <div id="bubble"></div>
+  </div>
+  <script src="sprite.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

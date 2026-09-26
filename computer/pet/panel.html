@@ -1,0 +1,329 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:;" />
+<title>JARVIS panel</title>
+<style>
+  :root {
+    --cyan: #5ad1ff;
+    --cyan-dim: rgba(90, 209, 255, 0.35);
+    --amber: #ffb454;
+    --amber-dim: rgba(255, 180, 84, 0.35);
+    --green: #5cffb0;
+    --red: #ff5a5a;
+    --ink: #d8f3ff;
+    --ink-dim: #7f9aa8;
+    --accent: var(--cyan);
+    --accent-dim: var(--cyan-dim);
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 500px;
+    height: auto;
+    background: transparent;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+    cursor: default;
+  }
+  body[data-stage="listening"] { --accent: var(--green); --accent-dim: rgba(92, 255, 176, 0.35); }
+  body[data-stage="thinking"]  { --accent: var(--amber); --accent-dim: var(--amber-dim); }
+  body[data-stage="error"]     { --accent: var(--red); --accent-dim: rgba(255, 90, 90, 0.35); }
+  body[data-stage="speaking"]  { --accent: var(--cyan); --accent-dim: var(--cyan-dim); }
+  body[data-stage="sleep"]     { --accent: var(--ink-dim); --accent-dim: rgba(127, 154, 168, 0.3); }
+
+  #card {
+    position: relative;
+    margin: 10px;
+    padding: 18px 20px 14px;
+    border-radius: 16px;
+    background: radial-gradient(120% 140% at 50% -10%, rgba(20, 34, 40, 0.92), rgba(6, 10, 13, 0.94));
+    border: 1px solid var(--accent-dim);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.02), 0 18px 40px rgba(0,0,0,0.5), 0 0 28px -6px var(--accent-dim);
+    color: var(--ink);
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+    transition: opacity 0.3s ease, transform 0.3s ease, box-shadow 0.6s ease, border-color 0.6s ease;
+    overflow: hidden;
+  }
+  #card.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  /* scanline overlay */
+  #card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.025) 0px,
+      rgba(255,255,255,0.025) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    mix-blend-mode: overlay;
+    opacity: 0.5;
+  }
+  #card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(180deg, transparent 0%, var(--accent-dim) 50%, transparent 100%);
+    opacity: 0.06;
+    animation: sweep 4.5s linear infinite;
+  }
+  @keyframes sweep {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+  }
+
+  /* --- Reactor / status row --- */
+  #reactor-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  #reactor {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    flex: none;
+  }
+  #reactor svg { width: 100%; height: 100%; overflow: visible; }
+  .ring {
+    fill: none;
+    stroke: var(--accent);
+    transition: stroke 0.5s ease;
+    transform-origin: 28px 28px;
+  }
+  .ring.r1 { stroke-width: 1.4; opacity: 0.9; stroke-dasharray: 4 6; animation: spin 6s linear infinite; }
+  .ring.r2 { stroke-width: 1; opacity: 0.55; stroke-dasharray: 2 5; animation: spin-rev 9s linear infinite; }
+  .ring.core { fill: var(--accent); opacity: 0.85; filter: drop-shadow(0 0 6px var(--accent)); animation: pulse 2.2s ease-in-out infinite; }
+  body[data-stage="thinking"] .ring.r1 { animation-duration: 1.6s; }
+  body[data-stage="thinking"] .ring.r2 { animation-duration: 2.4s; }
+  body[data-stage="thinking"] .ring.core { animation-duration: 0.9s; }
+  body[data-stage="listening"] .ring.core { animation-duration: 1s; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes spin-rev { to { transform: rotate(-360deg); } }
+  @keyframes pulse { 0%, 100% { r: 6px; opacity: 0.65; } 50% { r: 8px; opacity: 1; } }
+
+  #status-col { flex: 1; min-width: 0; }
+  #wordmark {
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    color: var(--accent);
+    text-shadow: 0 0 12px var(--accent-dim);
+    transition: color 0.5s ease;
+  }
+  #stage-line {
+    margin-top: 3px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #time {
+    font-size: 10px;
+    color: var(--ink-dim);
+    flex: none;
+  }
+
+  /* --- Transcript / reply --- */
+  #convo {
+    margin-top: 14px;
+    min-height: 64px;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  #heard {
+    color: var(--ink-dim);
+    font-style: italic;
+  }
+  #heard:not(:empty)::before { content: '"'; }
+  #heard:not(:empty)::after { content: '"'; }
+  #reply {
+    margin-top: 6px;
+    color: var(--ink);
+  }
+  #reply .cursor {
+    display: inline-block;
+    width: 6px;
+    height: 12px;
+    background: var(--accent);
+    margin-left: 2px;
+    vertical-align: -2px;
+    animation: blink 0.9s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* --- Live steps (what JARVIS is fetching) --- */
+  #steps {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 8px 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    background: rgba(90, 209, 255, 0.03);
+    font-size: 11px;
+    line-height: 1.7;
+  }
+  #steps:empty { display: none; }
+  #steps li {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    animation: step-in 0.25s ease both;
+  }
+  @keyframes step-in { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+  #steps .icon { width: 12px; flex: none; text-align: center; }
+  #steps .label { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #steps .detail { margin-left: auto; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
+  #steps li.running .icon { color: var(--amber); animation: spin-icon 0.9s linear infinite; display: inline-block; }
+  #steps li.done .icon { color: var(--green); }
+  #steps li.failed .icon { color: var(--red); }
+  #steps li.failed .detail { color: var(--red); }
+  @keyframes spin-icon { to { transform: rotate(360deg); } }
+
+  /* --- Voice bars while speaking --- */
+  #voice-bars {
+    display: none;
+    gap: 3px;
+    align-items: center;
+    height: 14px;
+    margin-left: 10px;
+  }
+  body[data-stage="speaking"] #voice-bars { display: inline-flex; }
+  #voice-bars span {
+    width: 3px;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    box-shadow: 0 0 6px var(--accent-dim);
+    animation: bar 0.9s ease-in-out infinite;
+  }
+  #voice-bars span:nth-child(2) { animation-delay: -0.2s; }
+  #voice-bars span:nth-child(3) { animation-delay: -0.45s; }
+  #voice-bars span:nth-child(4) { animation-delay: -0.7s; }
+  #voice-bars span:nth-child(5) { animation-delay: -0.3s; }
+  @keyframes bar { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(1); } }
+  body[data-stage="speaking"] .ring.r1 { animation-duration: 2.5s; }
+  body[data-stage="speaking"] .ring.core { animation-duration: 0.6s; }
+  body.has-steps #secondary { display: none; }
+  #reply.dim { opacity: 0.45; }
+
+  /* --- Secondary: todos + services --- */
+  #secondary {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .section-title {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-dim);
+    margin-bottom: 4px;
+  }
+  .task-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+  }
+  .task-list li {
+    display: flex;
+    gap: 6px;
+    color: var(--ink);
+  }
+  .task-list li::before {
+    content: '\2610';
+    color: var(--accent);
+  }
+  .task-empty, .task-more {
+    font-size: 11px;
+    color: var(--ink-dim);
+    font-style: italic;
+  }
+  .status-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 10.5px;
+    margin-top: 8px;
+  }
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--ink-dim);
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #4a4a52;
+    flex: none;
+  }
+  .dot.up { background: var(--green); box-shadow: 0 0 5px var(--green); }
+  .dot.down { background: var(--red); }
+  .build-line {
+    font-size: 10.5px;
+    color: var(--ink-dim);
+  }
+  #hint {
+    margin-top: 10px;
+    font-size: 9.5px;
+    color: #4c5c63;
+    text-align: center;
+  }
+</style>
+</head>
+<body data-stage="boot">
+  <div id="card">
+    <div id="reactor-row">
+      <div id="reactor">
+        <svg viewBox="0 0 56 56">
+          <circle class="ring r1" cx="28" cy="28" r="24" />
+          <circle class="ring r2" cx="28" cy="28" r="18" />
+          <circle class="ring core" cx="28" cy="28" r="6" />
+        </svg>
+      </div>
+      <div id="status-col">
+        <div id="wordmark">JARVIS<span id="voice-bars"><span></span><span></span><span></span><span></span><span></span></span></div>
+        <div id="stage-line">systems online</div>
+      </div>
+      <div id="time"></div>
+    </div>
+
+    <div id="convo">
+      <div id="heard"></div>
+      <ul id="steps"></ul>
+      <div id="reply"></div>
+    </div>
+
+    <div id="secondary">
+      <div class="section-title">Todos</div>
+      <ul class="task-list" id="tasks"></ul>
+      <div class="build-line" id="build-line"></div>
+      <div class="status-row" id="status-row"></div>
+    </div>
+
+    <div id="hint">click to dismiss</div>
+  </div>
+  <script src="panel-renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS Boot</title>
+<!--
+  The JARVIS boot intro: shown full-screen on every display by the desktop
+  pet (computer/pet/main.js showBoot) when you hold Space for 3 seconds after
+  turning the Mac on (computer/boot/). It follows the real startup -- live
+  status arrives from the pet (window.jarvisBoot) -- and ends with the
+  greeting once the voice app, speech recognition and the local model are up.
+  Opened on its own it plays a simulated boot.
+-->
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  body { color: #cfe6ff; font-family: 'Chakra Petch', 'Helvetica Neue', sans-serif; transition: opacity 1s ease; }
+  body.out { opacity: 0; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+  .mono { font-family: 'JetBrains Mono', Menlo, monospace; }
+
+  #title { position: fixed; left: 50%; top: calc(50% + min(24vh, 22vw)); transform: translateX(-50%); text-align: center; white-space: nowrap; }
+  #title h1 { margin: 0; font-weight: 500; font-size: clamp(28px, 4.2vw, 64px); letter-spacing: .42em; padding-left: .42em; color: #e6f2ff;
+    text-shadow: 0 0 18px rgba(120,190,255,.55); }
+  #title .sub { margin-top: 10px; font-size: clamp(10px, .9vw, 13px); letter-spacing: .5em; color: #5a86b3; opacity: 0; transition: opacity 1s ease; }
+  #title.subon .sub { opacity: 1; }
+  .glitch { animation: glitch .18s steps(2) 3; }
+  @keyframes glitch { 0% { transform: translate(-2px, 1px); text-shadow: 2px 0 #ff4f8b, -2px 0 #4fd8ff; } 100% { transform: translate(1px, -1px); } }
+
+  #log { position: fixed; left: 36px; bottom: 34px; width: min(560px, 44vw); font-size: 12px; line-height: 1.7; color: #4f7ea8; }
+  #log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: in .25s ease; }
+  #log .ok { color: #8fe3b0; }
+  #log .warn { color: #ffb86b; }
+  @keyframes in { from { opacity: 0; transform: translateX(-8px); } }
+
+  #systems { position: fixed; right: 36px; bottom: 34px; width: 300px; font-size: 12px; letter-spacing: .14em; }
+  #systems .head { color: #5a86b3; letter-spacing: .3em; font-size: 11px; border-bottom: 1px solid rgba(110,170,240,.25); padding-bottom: 8px; margin-bottom: 8px; }
+  .sys { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(110,170,240,.08); color: #9dbbd9; }
+  .sys .st { color: #3f6b96; }
+  .sys.loading .st { color: #7cc4ff; animation: blink .8s steps(2) infinite; }
+  .sys.online .st { color: #8fe3b0; text-shadow: 0 0 8px rgba(143,227,176,.6); }
+  .sys.failed .st { color: #ff8a8a; }
+  @keyframes blink { 50% { opacity: .25; } }
+
+  #top { position: fixed; top: 22px; left: 36px; right: 36px; display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .25em; color: #3f6b96; }
+
+  #greeting { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; opacity: 0; transition: opacity .8s ease; pointer-events: none; }
+  #greeting .big { font-size: clamp(22px, 2.6vw, 40px); color: #e6f2ff; letter-spacing: .06em; text-shadow: 0 0 22px rgba(120,190,255,.6); }
+  #greeting .tag { margin-top: 12px; font-size: 12px; letter-spacing: .45em; color: #8fe3b0; }
+  body.online #greeting { opacity: 1; }
+  body.online #title { opacity: .0; transition: opacity .6s ease; }
+
+  body.mirror #log, body.mirror #systems { opacity: .8; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="top" class="mono"><span>J.A.R.V.I.S // BOOT SEQUENCE</span><span id="clock"></span></div>
+<div id="title"><h1 id="name"></h1><div class="sub mono">JUST A RATHER VERY INTELLIGENT SYSTEM</div></div>
+<div id="log" class="mono"></div>
+<div id="systems" class="mono">
+  <div class="head">SYSTEMS</div>
+  <div class="sys" data-k="hud"><span>HUD INTERFACE</span><span class="st">STANDBY</span></div>
+  <div class="sys" data-k="voice"><span>VOICE ENGINE</span><span class="st">STANDBY</span></div>
+  <div class="sys" data-k="speech"><span>SPEECH RECOGNITION</span><span class="st">STANDBY</span></div>
+  <div class="sys" data-k="model"><span>LOCAL MODEL</span><span class="st">STANDBY</span></div>
+</div>
+<div id="greeting"><div class="big" id="greet-text"></div><div class="tag mono">ALL SYSTEMS ONLINE</div></div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const MIRROR = params.get('role') === 'mirror';
+const GREETING = params.get('greeting') || 'Good day. JARVIS is online.';
+const MIN_INTRO_MS = 5200;   // the intro plays at least this long, even if everything is already up
+const HOLD_ONLINE_MS = 3800; // greeting on screen before fading out
+if (MIRROR) document.body.classList.add('mirror');
+const $ = id => document.getElementById(id);
+const t0 = performance.now();
+
+// ---- canvas: grid, assembling particle orb, HUD rings, scan line -------------
+const cv = $('c'), ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() { DPR = window.devicePixelRatio || 1; W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; }
+addEventListener('resize', resize); resize();
+
+const N = 2200, golden = Math.PI * (3 - Math.sqrt(5));
+const pts = Array.from({ length: N }, (_, i) => {
+  const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), th = golden * i;
+  const a = Math.random() * Math.PI * 2, d = 2.2 + Math.random() * 3;
+  return { home: [Math.cos(th) * r, y, Math.sin(th) * r], from: [Math.cos(a) * d, (Math.random() - .5) * 3, Math.sin(a) * d], delay: Math.random() * 900 };
+});
+let progress = 0, shownProgress = 0, onlineAt = null;
+const ease = t => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+
+function draw(now) {
+  const t = now - t0, s = t / 1000;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * .6);
+  g.addColorStop(0, `rgba(10,30,60,${.55 * ease(t / 1500)})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  // grid
+  ctx.strokeStyle = `rgba(80,140,220,${.06 * ease(t / 1200)})`; ctx.lineWidth = 1;
+  for (let x = (s * 12) % 48; x < W; x += 48) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y < H; y += 48) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+  const cx = W / 2, cy = H / 2 - Math.min(H, W) * .04, R = Math.min(W, H) * .17;
+  const online = onlineAt !== null, pulse = online ? Math.sin((now - onlineAt) / 140) * Math.exp(-(now - onlineAt) / 900) : 0;
+
+  // particle orb assembling from a scattered cloud
+  const ry = s * .35, cyr = Math.cos(ry), syr = Math.sin(ry), rx = .35, cxr = Math.cos(rx), sxr = Math.sin(rx);
+  for (const p of pts) {
+    const k = ease((t - 500 - p.delay) / 1900);
+    const wob = .05 * Math.sin(p.home[0] * 3 + s * 1.3) * (1 - k * .4) + pulse * .12;
+    const X = (p.from[0] + (p.home[0] * (1 + wob) - p.from[0]) * k);
+    const Y = (p.from[1] + (p.home[1] * (1 + wob) - p.from[1]) * k);
+    const Z = (p.from[2] + (p.home[2] * (1 + wob) - p.from[2]) * k);
+    const x1 = X * cyr + Z * syr, z1 = -X * syr + Z * cyr, y2 = Y * cxr - z1 * sxr, z2 = Y * sxr + z1 * cxr;
+    const persp = 3 / (3 - z2), depth = Math.min(1, Math.max(0, (z2 + 1.3) / 2.6));
+    const m = Math.min(1, Math.max(0, (p.home[1] * .5 + .5)));
+    ctx.fillStyle = `rgba(${70 + 130 * m | 0},${170 - 50 * m | 0},255,${(.12 + depth * .8) * ease((t - 300) / 800)})`;
+    ctx.fillRect(cx + x1 * R * persp, cy + y2 * R * persp, 1.4 + depth * 1.2, 1.4 + depth * 1.2);
+  }
+
+  // HUD rings
+  const ringIn = ease((t - 1100) / 1200);
+  ctx.save(); ctx.translate(cx, cy);
+  const rings = [
+    { r: R * 1.45, w: 2, dash: [R * .5, R * .12], speed: .25, a: .55 },
+    { r: R * 1.62, w: 1, dash: [3, 7], speed: -.12, a: .45 },
+    { r: R * 1.85, w: 3, dash: [R * .08, R * .3], speed: .5, a: .35 },
+  ];
+  for (const ring of rings) {
+    ctx.strokeStyle = `rgba(120,190,255,${ring.a * ringIn})`; ctx.lineWidth = ring.w; ctx.setLineDash(ring.dash);
+    ctx.beginPath(); ctx.arc(0, 0, ring.r * (0.85 + .15 * ringIn) * (1 + pulse * .04), s * ring.speed, s * ring.speed + Math.PI * 2 * ringIn); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  // tick ring
+  for (let i = 0; i < 72; i++) {
+    const a = (i / 72) * Math.PI * 2 - s * .05, long = i % 6 === 0;
+    ctx.strokeStyle = `rgba(90,150,220,${(long ? .5 : .22) * ringIn})`; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(Math.cos(a) * R * 2.02, Math.sin(a) * R * 2.02); ctx.lineTo(Math.cos(a) * R * (long ? 2.12 : 2.07), Math.sin(a) * R * (long ? 2.12 : 2.07)); ctx.stroke();
+  }
+  // progress arc
+  shownProgress += (progress - shownProgress) * .06;
+  ctx.strokeStyle = online ? '#8fe3b0' : '#7cc4ff'; ctx.lineWidth = 3; ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 12;
+  ctx.beginPath(); ctx.arc(0, 0, R * 2.28, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * shownProgress * ringIn); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = `rgba(160,210,255,${ringIn})`; ctx.font = `500 12px "JetBrains Mono", Menlo, monospace`; ctx.textAlign = 'center';
+  ctx.fillText(`${Math.round(shownProgress * 100)}%`, 0, -R * 2.28 - 12);
+  ctx.restore();
+
+  // scan line sweeping down at the start
+  if (t < 1800) {
+    const y = ease(t / 1800) * H;
+    const sg = ctx.createLinearGradient(0, y - 60, 0, y + 2);
+    sg.addColorStop(0, 'rgba(120,190,255,0)'); sg.addColorStop(1, 'rgba(160,215,255,.5)');
+    ctx.fillStyle = sg; ctx.fillRect(0, y - 60, W, 62);
+  }
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+// ---- title, clock, log ---------------------------------------------------------
+setTimeout(() => {
+  const name = 'J.A.R.V.I.S'; let i = 0;
+  const type = setInterval(() => { $('name').textContent = name.slice(0, ++i); if (i >= name.length) { clearInterval(type); $('name').classList.add('glitch'); $('title').classList.add('subon'); } }, 85);
+}, 1300);
+setInterval(() => { const d = new Date(); $('clock').textContent = d.toLocaleTimeString('en-GB'); }, 250);
+
+function log(text, cls = '') {
+  const el = document.createElement('div'); el.textContent = text; if (cls) el.className = cls;
+  $('log').appendChild(el);
+  while ($('log').children.length > 12) $('log').firstChild.remove();
+}
+const SCRIPT = [
+  '> power-on self test ................ ok', '> mounting local memory ............. ok', '> loading persona matrix', '> calibrating audio input',
+  '> linking HUD interface', '> starting whisper speech engine', '> starting local language model (qwen3)', '> warming piper voice',
+  '> indexing project folders', '> syncing briefing cache', '> checking network uplink', '> handshake with desktop companion',
+];
+SCRIPT.forEach((line, i) => setTimeout(() => log(line), 400 + i * 330));
+
+// ---- live status -----------------------------------------------------------------
+const LABEL = { hud: 'HUD interface', voice: 'voice engine', speech: 'speech recognition', model: 'local model' };
+const seen = {};
+let finished = false;
+function onStatus(st) {
+  const keys = ['hud', 'voice', 'speech', 'model'];
+  keys.forEach((k, i) => {
+    const row = document.querySelector(`.sys[data-k="${k}"]`);
+    const up = !!st[k], started = performance.now() - t0 > 900 + i * 500;
+    row.className = 'sys ' + (up && started ? 'online' : st.timedOut ? 'failed' : started ? 'loading' : '');
+    row.querySelector('.st').textContent = up && started ? 'ONLINE' : st.timedOut ? 'FAILED' : started ? 'LOADING' : 'STANDBY';
+    if (up && started && !seen[k]) { seen[k] = true; log(`> ${LABEL[k]} ${'.'.repeat(Math.max(3, 24 - LABEL[k].length))} online`, 'ok'); }
+  });
+  progress = keys.filter((k, i) => st[k] && performance.now() - t0 > 900 + i * 500).length / keys.length;
+  if (st.ready && !finished && performance.now() - t0 > MIN_INTRO_MS) finish(true);
+  if (st.timedOut && !finished) {
+    log(`> ${keys.filter(k => !st[k]).map(k => LABEL[k]).join(', ')} didn't come up -- check PA`, 'warn');
+    finish(false);
+  }
+}
+
+function finish(ok) {
+  finished = true;
+  if (ok) {
+    progress = 1;
+    onlineAt = performance.now();
+    $('greet-text').textContent = GREETING;
+    document.body.classList.add('online');
+    log('> all systems online', 'ok');
+  }
+  setTimeout(() => {
+    document.body.classList.add('out');
+    setTimeout(() => { if (!MIRROR && window.jarvisBoot) window.jarvisBoot.done(); }, 1100);
+  }, ok ? HOLD_ONLINE_MS : 6000);
+}
+
+if (window.jarvisBoot) {
+  window.jarvisBoot.onStatus(onStatus);
+} else {
+  // Standalone preview: pretend each system comes up in turn.
+  const fake = { hud: true, voice: false, speech: false, model: false };
+  setTimeout(() => fake.voice = true, 2500); setTimeout(() => fake.speech = true, 3600); setTimeout(() => fake.model = true, 5000);
+  setInterval(() => onStatus({ ...fake, ready: fake.voice && fake.speech && fake.model }), 500);
+}
+</script>
+</body>
+</html>

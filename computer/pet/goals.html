@@ -1,0 +1,318 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:;" />
+<title>Goals & reminders</title>
+<!-- Goals, people to stay in touch with, reminder settings and the pet's
+     character. Data: database/goals.json via goals-window.js. -->
+<style>
+  :root { --bg: #f3f4f9; --card: #fff; --ink: #1d2233; --muted: #7a8196; --line: rgba(40,50,90,.1); --blue: #3761e6; --green: #2fa86a; --amber: #e39a2b; --red: #e05555; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; }
+  header { padding: 38px 24px 0; -webkit-app-region: drag; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin-top: 3px; }
+  nav { display: flex; gap: 6px; margin: 16px 0 0; -webkit-app-region: no-drag; }
+  nav button { border: 0; background: transparent; padding: 8px 14px; border-radius: 10px; font: 600 13px -apple-system, sans-serif; color: var(--muted); cursor: pointer; }
+  nav button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(20,25,60,.1); }
+  main { padding: 16px 24px 40px; }
+  section { display: none; } section.on { display: block; }
+  .card { background: var(--card); border-radius: 16px; padding: 14px 16px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(20,25,60,.06); }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .grow { flex: 1; min-width: 0; }
+  .gtitle { font-weight: 700; font-size: 15px; }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .bar { height: 7px; border-radius: 4px; background: #e8eaf2; margin-top: 9px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 4px; background: var(--blue); transition: width .4s; }
+  .bar.met > div { background: var(--green); } .bar.behind > div { background: var(--amber); }
+  .pill { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 8px; background: #eef1fb; color: var(--blue); white-space: nowrap; }
+  .pill.met { background: #e5f6ec; color: var(--green); } .pill.behind { background: #fdf1de; color: var(--amber); }
+  button.btn { border: 0; border-radius: 10px; padding: 8px 12px; font: 700 13px -apple-system, sans-serif; background: #e3e5ef; color: #2e3450; cursor: pointer; }
+  button.btn.primary { background: var(--blue); color: #fff; } button.btn.done { background: #e5f6ec; color: var(--green); }
+  button.icon { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 4px; } button.icon:hover { color: var(--ink); }
+  form.card { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  form .full { grid-column: 1 / -1; }
+  label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 4px; }
+  input, select { width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font: 14px -apple-system, sans-serif; background: #fbfbfe; color: var(--ink); }
+  input:focus, select:focus { outline: 2px solid rgba(55,97,230,.3); border-color: var(--blue); }
+  .empty { color: var(--muted); text-align: center; padding: 22px; }
+  .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .setting:last-child { border-bottom: 0; }
+  .setting .d { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .setting input[type=number], .setting input[type=time], .setting input[type=text] { width: 110px; }
+  .switch { position: relative; width: 42px; height: 25px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; background: #d5d8e3; border-radius: 13px; transition: .2s; cursor: pointer; }
+  .switch span::after { content: ''; position: absolute; left: 3px; top: 3px; width: 19px; height: 19px; border-radius: 50%; background: #fff; transition: .2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .switch input:checked + span { background: var(--green); } .switch input:checked + span::after { transform: translateX(17px); }
+  details { margin-top: 10px; } summary { cursor: pointer; font-weight: 600; color: var(--blue); }
+  ol.steps { padding-left: 20px; line-height: 1.55; color: #33394d; font-size: 13px; }
+  ol.steps code, pre.tpl { background: #f0f2f8; border-radius: 6px; padding: 1px 5px; font: 12px ui-monospace, Menlo, monospace; }
+  pre.tpl { display: block; padding: 8px 10px; white-space: pre; }
+  .stats { display: flex; gap: 18px; margin-top: 6px; flex-wrap: wrap; }
+  .stats div { font-size: 12px; color: var(--muted); } .stats b { display: block; font-size: 18px; color: var(--ink); }
+  .chars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .char { background: var(--card); border-radius: 16px; padding: 8px 8px 10px; text-align: center; cursor: pointer; border: 2px solid transparent; box-shadow: 0 1px 3px rgba(20,25,60,.06); }
+  .char.on { border-color: var(--blue); }
+  .char canvas { width: 100%; aspect-ratio: 85/100; }
+  .char b { display: block; font-size: 13px; } .char small { color: var(--muted); font-size: 11px; }
+  .moods { display: flex; gap: 6px; font-size: 20px; margin-top: 6px; }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 4px 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Goals & reminders</h1>
+  <div class="sub" id="summary">Your pet checks in on these from time to time -- and JARVIS reviews them in your briefing.</div>
+  <nav>
+    <button data-tab="goals" class="on">🎯 Goals</button>
+    <button data-tab="people">📞 People</button>
+    <button data-tab="reminders">⏰ Reminders</button>
+    <button data-tab="pet">🐾 Pet</button>
+  </nav>
+</header>
+<main>
+  <section id="goals" class="on">
+    <div id="goal-list"></div>
+    <h3 id="goal-form-title">New goal</h3>
+    <form class="card" id="goal-form">
+      <input type="hidden" name="id" />
+      <div class="full"><label>Goal</label><input name="title" placeholder="e.g. Work out, Read 20 pages, Apply to 3 jobs" required /></div>
+      <div><label>How often</label><select name="cadence"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+      <div><label>Times per period</label><input name="target" type="number" min="1" max="31" value="1" /></div>
+      <div class="full"><label>Why it matters (the pet reminds you)</label><input name="why" placeholder="e.g. to feel strong for the summer trip" /></div>
+      <div><label>Remind me from</label><input name="remindAt" type="time" value="17:00" /></div>
+      <div><label>Reminders</label><select name="remind"><option value="true">On</option><option value="false">Off</option></select></div>
+      <div class="full row"><button class="btn primary" type="submit">Save goal</button><button class="btn" type="button" id="goal-cancel" hidden>Cancel</button></div>
+    </form>
+  </section>
+
+  <section id="people">
+    <div id="people-list"></div>
+    <h3>Add someone</h3>
+    <form class="card" id="person-form">
+      <input type="hidden" name="id" />
+      <div class="full"><label>Name</label><input name="name" placeholder="e.g. Mom, Kwame, Anna" required /></div>
+      <div><label>Who</label><select name="relation"><option value="family">Family</option><option value="friend">Friend</option><option value="partner">Partner</option></select></div>
+      <div><label>Check in every (days)</label><input name="everyDays" type="number" min="1" max="365" value="7" /></div>
+      <div class="full"><button class="btn primary" type="submit">Save</button></div>
+    </form>
+  </section>
+
+  <section id="reminders">
+    <div class="card" id="settings"></div>
+    <h3>Apple Health (iPhone)</h3>
+    <div class="card" id="health"></div>
+    <h3>Recent moods</h3>
+    <div class="card"><div class="moods" id="moods"></div></div>
+  </section>
+
+  <section id="pet">
+    <div class="chars" id="chars"></div>
+    <p class="sub" style="margin-top:14px">He turns all the way around now: front, side and back -- and walks wherever he likes on your screen.</p>
+  </section>
+</main>
+<script src="sprite.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => { const d = document.createElement('div'); d.textContent = String(t ?? ''); return d.innerHTML; };
+  // In a plain browser (no Electron bridge) the page runs on sample data.
+  const api = window.goalsApi || mockApi();
+  let data = null;
+
+  document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
+    document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('section').forEach((s) => s.classList.toggle('on', s.id === b.dataset.tab));
+  });
+
+  function periodWord(g) { return g.cadence === 'daily' ? 'today' : g.cadence === 'weekly' ? 'this week' : 'this month'; }
+
+  function renderGoals() {
+    const list = $('goal-list');
+    if (!data.goals.length) { list.innerHTML = '<div class="card empty">No goals yet -- add your first one below.</div>'; return; }
+    list.innerHTML = '';
+    for (const g of data.goals) {
+      const p = g.progress;
+      const cls = p.met ? 'met' : p.behind ? 'behind' : '';
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.innerHTML = `
+        <div class="row">
+          <div class="grow"><div class="gtitle">${esc(g.title)}</div>
+            <div class="meta">${g.cadence[0].toUpperCase() + g.cadence.slice(1)}${g.target > 1 ? ` · ${g.target}×` : ''}${g.why ? ` · ${esc(g.why)}` : ''}${g.streak > 1 ? ` · 🔥 ${g.streak}-day streak` : ''}</div></div>
+          <span class="pill ${cls}">${p.done}/${p.target} ${periodWord(g)}</span>
+          <button class="btn ${p.met ? 'done' : 'primary'}" data-act="log">${p.met ? '✓ Done' : 'Done today'}</button>
+          <button class="icon" data-act="edit" title="Edit">✎</button>
+          <button class="icon" data-act="del" title="Remove">🗑</button>
+        </div>
+        <div class="bar ${cls}"><div style="width:${Math.min(100, (p.done / p.target) * 100)}%"></div></div>`;
+      el.querySelector('[data-act=log]').onclick = async () => { data = await (p.met ? api.unlog(g.id) : api.log(g.id)); render(); };
+      el.querySelector('[data-act=edit]').onclick = () => editGoal(g);
+      el.querySelector('[data-act=del]').onclick = async () => { if (confirm(`Remove "${g.title}"?`)) { data = await api.deleteGoal(g.id); render(); } };
+      list.appendChild(el);
+    }
+  }
+
+  function editGoal(g) {
+    const f = $('goal-form');
+    f.id.value = g.id; f.title.value = g.title; f.cadence.value = g.cadence; f.target.value = g.target; f.why.value = g.why || '';
+    f.remindAt.value = g.remindAt || '17:00'; f.remind.value = String(g.remind !== false);
+    $('goal-form-title').textContent = 'Edit goal'; $('goal-cancel').hidden = false;
+    f.title.focus();
+  }
+  function resetGoalForm() { $('goal-form').reset(); $('goal-form').id.value = ''; $('goal-form-title').textContent = 'New goal'; $('goal-cancel').hidden = true; }
+  $('goal-cancel').onclick = resetGoalForm;
+  $('goal-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    data = await api.saveGoal({ id: f.id.value || undefined, title: f.title.value, cadence: f.cadence.value, target: f.target.value,
+      why: f.why.value, remindAt: f.remindAt.value, remind: f.remind.value === 'true' });
+    resetGoalForm(); render();
+  };
+
+  function renderPeople() {
+    const list = $('people-list');
+    if (!data.people.length) { list.innerHTML = '<div class="card empty">Add the people you want to keep in touch with -- your pet nudges you when it has been a while.</div>'; return; }
+    list.innerHTML = '';
+    for (const p of data.people) {
+      const overdue = p.daysSince === null || p.daysSince >= p.everyDays;
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.innerHTML = `<div class="row">
+        <div style="font-size:22px">${p.relation === 'family' ? '🏡' : p.relation === 'partner' ? '💞' : '🧑‍🤝‍🧑'}</div>
+        <div class="grow"><div class="gtitle">${esc(p.name)}</div>
+          <div class="meta">Every ${p.everyDays} day${p.everyDays === 1 ? '' : 's'} · ${p.daysSince === null ? 'no call logged yet' : p.daysSince === 0 ? 'talked today' : `last talked ${p.daysSince} day${p.daysSince === 1 ? '' : 's'} ago`}</div></div>
+        <span class="pill ${overdue ? 'behind' : 'met'}">${overdue ? 'due' : 'fine'}</span>
+        <button class="btn primary" data-act="call">Called ✓</button>
+        <button class="icon" data-act="del" title="Remove">🗑</button></div>`;
+      el.querySelector('[data-act=call]').onclick = async () => { data = await api.contacted(p.id); render(); };
+      el.querySelector('[data-act=del]').onclick = async () => { if (confirm(`Remove ${p.name}?`)) { data = await api.deletePerson(p.id); render(); } };
+      list.appendChild(el);
+    }
+  }
+  $('person-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    data = await api.savePerson({ name: f.name.value, relation: f.relation.value, everyDays: f.everyDays.value });
+    f.reset(); render();
+  };
+
+  const SETTINGS = [
+    ['goalNudges', 'Goal check-ins', 'Daily goals from their reminder time; weekly/monthly ones when you fall behind.'],
+    ['water', 'Water breaks', 'Every N minutes you are at the Mac (time away counts as a break).', { key: 'everyMin', type: 'number', suffix: 'min' }],
+    ['moodCheck', 'Mood check-in', 'Twice a day, with a tip based on how you feel.'],
+    ['cpu', 'High CPU alerts', 'When your Mac has been maxed out for 3+ minutes -- names the app and what to do.', { key: 'threshold', type: 'number', suffix: '%' }],
+    ['social', 'Call friends & family', 'Nudges when someone on your People list is due.'],
+    ['partner', 'Ideas for your girlfriend', 'A little surprise idea every few days.', { key: 'name', type: 'text', placeholder: 'her name' }],
+  ];
+  function renderSettings() {
+    const s = data.settings;
+    const box = $('settings');
+    box.innerHTML = '';
+    const me = document.createElement('div');
+    me.className = 'setting';
+    me.innerHTML = `<div class="grow"><b>Your name</b><div class="d">So your pet (and JARVIS) can greet you.</div></div><input type="text" value="${esc(s.userName || '')}" placeholder="e.g. Sam" />`;
+    me.querySelector('input').onchange = async (e) => { data = await api.saveSettings({ userName: e.target.value.trim() }); };
+    box.appendChild(me);
+    for (const [key, title, desc, extra] of SETTINGS) {
+      const row = document.createElement('div');
+      row.className = 'setting';
+      row.innerHTML = `<div class="grow"><b>${title}</b><div class="d">${desc}</div></div>
+        ${extra ? `<input type="${extra.type}" value="${esc(s[key][extra.key] ?? '')}" placeholder="${extra.placeholder || ''}" title="${extra.suffix || ''}" />` : ''}
+        <label class="switch"><input type="checkbox" ${s[key].on ? 'checked' : ''} /><span></span></label>`;
+      row.querySelector('.switch input').onchange = async (e) => { data = await api.saveSettings({ [key]: { ...s[key], on: e.target.checked } }); };
+      const inp = extra && row.querySelector(`input[type=${extra.type}]`);
+      if (inp) inp.onchange = async () => { data = await api.saveSettings({ [key]: { ...data.settings[key], [extra.key]: extra.type === 'number' ? Number(inp.value) : inp.value } }); };
+      box.appendChild(row);
+    }
+    const quiet = document.createElement('div');
+    quiet.className = 'setting';
+    quiet.innerHTML = `<div class="grow"><b>Quiet hours</b><div class="d">No pop-ups in this window.</div></div>
+      <input type="time" value="${s.quiet.from}" /> <input type="time" value="${s.quiet.to}" />`;
+    const [qf, qt] = quiet.querySelectorAll('input');
+    qf.onchange = qt.onchange = async () => { data = await api.saveSettings({ quiet: { from: qf.value, to: qt.value } }); };
+    box.appendChild(quiet);
+    const EMO = { great: '😄', okay: '🙂', tired: '😴', stressed: '😣' };
+    $('moods').innerHTML = data.recentMoods.length ? data.recentMoods.map((m) => `<span title="${new Date(m.at).toLocaleString()}">${EMO[m.mood] || '•'}</span>`).join('') : '<span class="sub" style="font-size:13px">Your mood check-ins will show here.</span>';
+  }
+
+  function renderHealth() {
+    const h = data.health;
+    const cfg = data.settings.health || { on: true, stepGoal: 8000, sleepGoalH: 7.5 };
+    const ago = h ? Math.round((Date.now() - h.synced) / 3600000) : null;
+    const sleep = h && h.sleepMin ? `${Math.floor(h.sleepMin / 60)}h ${String(Math.round(h.sleepMin % 60)).padStart(2, '0')}m` : '—';
+    $('health').innerHTML = `
+      <div class="setting"><div class="grow"><b>${h ? `Last sync: ${ago < 1 ? 'just now' : `${ago} h ago`} (${esc(h.date)})` : 'Not connected yet'}</b>
+        <div class="d">${h ? 'Your iPhone sends steps, sleep and activity; JARVIS reviews them in your briefing.' : 'Set up the Shortcut below on your iPhone -- takes about 5 minutes.'}</div>
+        ${h ? `<div class="stats"><div><b>${h.steps !== undefined ? Math.round(h.steps).toLocaleString('de-DE') : '—'}</b>steps</div><div><b>${sleep}</b>sleep</div>
+          <div><b>${h.exerciseMin !== undefined ? Math.round(h.exerciseMin) : '—'}</b>exercise min</div><div><b>${h.restingHr !== undefined ? Math.round(h.restingHr) : '—'}</b>resting bpm</div></div>` : ''}</div></div>
+      <div class="setting"><div class="grow"><b>Walk & sleep nudges</b><div class="d">A walk nudge after 15:00 when you're under half your steps; a gentle card after a short night.</div></div>
+        <label class="switch"><input type="checkbox" id="h-on" ${cfg.on ? 'checked' : ''} /><span></span></label></div>
+      <div class="setting"><div class="grow"><b>Daily goals</b><div class="d">Steps per day · hours of sleep</div></div>
+        <input type="number" id="h-steps" value="${cfg.stepGoal}" min="1000" step="500" /> <input type="number" id="h-sleep" value="${cfg.sleepGoalH}" min="4" max="12" step="0.5" /></div>
+      <details ${h ? '' : 'open'}><summary>How to set up the iPhone Shortcut</summary>
+        <ol class="steps">
+          <li>On your iPhone, open <b>Shortcuts</b> → <b>+</b> → name it <code>JARVIS Health</code>.</li>
+          <li>Add <b>Find Health Samples</b>: Type <code>Steps</code>, Start Date <code>is today</code>. Then <b>Calculate Statistics</b> → <code>Sum</code>, then <b>Round Number</b>. Tap the result and rename it <code>Steps</code>.</li>
+          <li>Same again for <code>Active Energy</code> (rename <code>Kcal</code>) and <code>Exercise Minutes</code> (rename <code>Exercise</code>).</li>
+          <li>Sleep: <b>Find Health Samples</b>: Type <code>Sleep Analysis</code>, Start Date <code>is in the last 1 day</code>, Value <code>is not</code> <code>In Bed</code> and <code>is not</code> <code>Awake</code>. Then <b>Get Details of Health Sample</b> → <code>Duration</code>, <b>Calculate Statistics</b> → <code>Sum</code>. Rename <code>Sleep</code>.</li>
+          <li>(Optional) <b>Find Health Samples</b>: <code>Resting Heart Rate</code>, sort by Start Date latest first, limit 1 → rename <code>HR</code>.</li>
+          <li>Add <b>Text</b> with exactly this (tap to insert the variables; the date is <b>Current Date</b> with custom format <code>yyyy-MM-dd</code>):
+            <pre class="tpl">date: [Current Date]
+steps: [Steps]
+active_kcal: [Kcal]
+exercise_min: [Exercise]
+sleep: [Sleep]
+resting_hr: [HR]</pre></li>
+          <li>Add <b>Save File</b>: turn <b>Ask Where to Save</b> off, Destination <code>Shortcuts</code>, Subpath <code>JARVIS/health-[Current Date].txt</code> (same date format), <b>Overwrite If File Exists</b> on.</li>
+          <li>Run it once and allow Health access. This page shows "Last sync" within a minute.</li>
+          <li><b>Automation</b> tab → <b>+</b> → <b>Time of Day</b> → 07:30, daily, <b>Run Immediately</b> → run <code>JARVIS Health</code>. Add two more at <b>15:00</b> and <b>21:30</b> (the 15:00 run powers the walk nudge).</li>
+        </ol>
+        <div class="d">Nothing leaves your devices except through your own iCloud Drive; JARVIS only reads the file on this Mac.</div>
+      </details>`;
+    const save = async () => { data = await api.saveSettings({ health: { on: $('h-on').checked, stepGoal: Number($('h-steps').value) || 8000, sleepGoalH: Number($('h-sleep').value) || 7.5 } }); };
+    $('h-on').onchange = save; $('h-steps').onchange = save; $('h-sleep').onchange = save;
+  }
+
+  function renderChars() {
+    const box = $('chars');
+    box.innerHTML = '';
+    for (const [id, c] of Object.entries(typeof PET_CHARACTERS !== 'undefined' ? PET_CHARACTERS : { human: { label: 'Little man' } })) {
+      const el = document.createElement('div');
+      el.className = 'char' + (data.character === id ? ' on' : '');
+      el.innerHTML = `<canvas width="170" height="200"></canvas><b>${esc(c.label)}</b><small>${esc(c.blurb || '')}</small>`;
+      const cv = el.querySelector('canvas');
+      if (typeof drawMan === 'function') drawMan(cv.getContext('2d'), 170, 200, { character: id, view: 'front', eyes: 'happy', mouth: 'grin', armF: { s: 2.2, e: -0.5 } });
+      el.onclick = async () => { data = await api.setCharacter(id); renderChars(); };
+      box.appendChild(el);
+    }
+  }
+
+  function render() {
+    const behind = data.goals.filter((g) => g.progress.behind && !g.progress.met).length;
+    $('summary').textContent = data.goals.length
+      ? `${data.goals.filter((g) => g.progress.met).length} of ${data.goals.length} goals done for their period${behind ? ` · ${behind} behind` : ''}. Your pet checks in; JARVIS reviews them in your briefing.`
+      : 'Your pet checks in on these from time to time -- and JARVIS reviews them in your briefing.';
+    renderGoals(); renderPeople(); renderSettings(); renderHealth(); renderChars();
+  }
+
+  api.get().then((d) => { data = d; render(); });
+
+  function mockApi() {
+    const today = Date.now();
+    let d = { goals: [
+      { id: 'g1', title: 'Work out', cadence: 'weekly', target: 3, why: 'feel strong', progress: { done: 1, target: 3, met: false, behind: true }, streak: 0 },
+      { id: 'g2', title: 'Read 20 pages', cadence: 'daily', target: 1, progress: { done: 1, target: 1, met: true, behind: false }, streak: 4 },
+      { id: 'g3', title: 'Apply to 3 jobs', cadence: 'weekly', target: 3, progress: { done: 2, target: 3, met: false, behind: false }, streak: 0 } ],
+      people: [{ id: 'p1', name: 'Mom', relation: 'family', everyDays: 7, daysSince: 12 }, { id: 'p2', name: 'Kwame', relation: 'friend', everyDays: 14, daysSince: 3 }],
+      health: { date: '2026-09-26', synced: Date.now() - 2 * 3600000, steps: 6420, sleepMin: 412, exerciseMin: 24, restingHr: 58 },
+      settings: { health: { on: true, stepGoal: 8000, sleepGoalH: 7.5 }, goalNudges: { on: true }, water: { on: true, everyMin: 60 }, moodCheck: { on: true }, cpu: { on: true, threshold: 85 }, social: { on: true }, partner: { on: true, name: '' }, quiet: { from: '22:00', to: '08:00' } },
+      recentMoods: [{ at: today, mood: 'great' }, { at: today, mood: 'tired' }], character: 'human' };
+    const same = async () => d;
+    return { get: same, saveGoal: same, deleteGoal: same, log: same, unlog: same, savePerson: same, deletePerson: same, contacted: same, saveSettings: same,
+      setCharacter: async (c) => { d = { ...d, character: c }; return d; } };
+  }
+</script>
+</body>
+</html>

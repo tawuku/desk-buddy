@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>JARVIS HUD preview</title>
+<style>
+  body { background: #1a1e24; margin: 0; padding: 24px; font-family: -apple-system, sans-serif; }
+  #controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  button { background: #2b2f38; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  button:hover { background: #3a3f4b; }
+  #frame-wrap { display: inline-block; background: repeating-conic-gradient(#2a2f38 0% 25%, #1a1e24 0% 50%) 50% / 20px 20px; padding: 20px; border-radius: 12px; }
+  iframe { border: none; width: 480px; height: 420px; display: block; }
+</style>
+</head>
+<body>
+  <div id="controls">
+    <button data-stage="boot">boot</button>
+    <button data-stage="listening">listening</button>
+    <button data-stage="heard">heard</button>
+    <button data-stage="thinking">thinking</button>
+    <button data-stage="reply">reply</button>
+    <button data-stage="error">error</button>
+    <button data-stage="empty">empty</button>
+    <button id="auto">auto-cycle</button>
+  </div>
+  <div id="frame-wrap">
+    <iframe id="frame" src="panel.html"></iframe>
+  </div>
+  <script>
+    const frame = document.getElementById('frame');
+    const SAMPLE = {
+      heard: "what's the weather like and any news today",
+      reply: "It's 14 degrees and clear in Berlin right now. Top story today: local elections wrap up this weekend. You've got one open task: add your first task by asking JARVIS to add one here.",
+      error: '(error: model timed out)',
+      empty: "didn't catch that -- try again",
+    };
+
+    function mockData() {
+      return {
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        tasks: ['Ship the HUD redesign', 'Fix Gateway restart bug'],
+        moreCount: 1,
+        buildLine: 'Build 007 -- HUD + report + reliability',
+        services: { gateway: true, model: true, tts: true, voice: true },
+        autoHideMs: 0,
+      };
+    }
+
+    function send(stage) {
+      const win = frame.contentWindow;
+      if (!win || !win.__emitData) return;
+      if (stage === 'boot') {
+        win.__emitData(mockData());
+        return;
+      }
+      const text = SAMPLE[stage];
+      win.__emitState({ stage, text });
+    }
+
+    // panel.html loads panel-renderer.js itself at parse time (same as the
+    // real Electron window does), which is too early to inject a mock
+    // window.panel via contentWindow -- by the time 'load' fires it's
+    // already thrown trying to call the real (absent) bridge. Instead:
+    // fetch the markup, drop its CSP (this preview harness only, never the
+    // shipped file) so an inline mock script is allowed to run, and splice
+    // the mock in just before the real renderer script tag.
+    async function boot() {
+      const html = await fetch('panel.html').then((r) => r.text());
+      const withoutCsp = html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, '');
+      const mockScript = `<script>
+        window.panel = (() => {
+          const dataCbs = [];
+          const stateCbs = [];
+          window.__emitData = (d) => dataCbs.forEach((cb) => cb(d));
+          window.__emitState = (s) => stateCbs.forEach((cb) => cb(s));
+          return {
+            onData: (cb) => dataCbs.push(cb),
+            onState: (cb) => stateCbs.push(cb),
+            dismiss: () => document.querySelector('#card').classList.remove('visible'),
+          };
+        })();
+      <\/script>`;
+      const wired = withoutCsp.replace('<script src="panel-renderer.js">', `${mockScript}\n<script src="panel-renderer.js">`);
+      frame.srcdoc = wired;
+    }
+
+    frame.addEventListener('load', () => {
+      if (!frame.contentWindow.__emitData) return; // first load = blank about:blank
+      send('boot');
+    });
+
+    boot();
+
+    document.querySelectorAll('button[data-stage]').forEach((btn) => {
+      btn.addEventListener('click', () => send(btn.dataset.stage));
+    });
+
+    let cycling = null;
+    document.getElementById('auto').addEventListener('click', () => {
+      if (cycling) { clearInterval(cycling); cycling = null; return; }
+      const seq = ['boot', 'listening', 'heard', 'thinking', 'reply'];
+      let i = 0;
+      cycling = setInterval(() => { send(seq[i % seq.length]); i += 1; }, 2200);
+    });
+  </script>
+</body>
+</html>

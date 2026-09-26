@@ -1,0 +1,13 @@
+{
+  "name": "jarvis-pa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PA -- the control app for JARVIS: start/stop every service and the desktop pet, pick a voice, tune CPU threads. Nothing in JARVIS auto-starts at login anymore; this is how you turn it on.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.4.3"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "_comment": "The full-screen JARVIS screen (computer/screen/, served by computer/voice/screen_server.py). It takes over every display only when you ask for updates or your briefing. brief_on_wake: true = also on every 'hey Jarvis'. wake_cooldown_minutes: with brief_on_wake, skip it if you were briefed less than this long ago. Read at every wake, no restart needed.",
+  "brief_on_wake": false,
+  "wake_cooldown_minutes": 0
+}
