@@ -80,20 +80,33 @@ ok "Electron and the pet's packages"
 ELECTRON="$ROOT/computer/pet/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
 [ -x "$ELECTRON" ] || die "Electron didn't install -- see the npm output above."
 echo "$MODE" > "$ROOT/config/mode"
-# Pet only: the pet starts with your Mac. With JARVIS, it starts with JARVIS
-# (boot key / PA), like everything else.
-PET_ATLOAD=$([ "$MODE" = "pet" ] && echo true || echo false)
+# Both modes: the pet starts with your Mac (with JARVIS, so does JARVIS --
+# it listens for "hey Jarvis" from login; the first wake after a restart
+# plays the boot intro). Switch either off in PA.
+PET_ATLOAD=true
 write_agent com.jarvis.pet "$PET_ATLOAD" false "$ROOT/computer/pet" "$ELECTRON" "$ROOT/computer/pet"
 ok "LaunchAgent com.jarvis.pet"
+
+install_bootkey() {
+  if have swiftc && swiftc -O -o "$ROOT/computer/boot/bootkey" "$ROOT/computer/boot/bootkey.swift" 2>/dev/null; then
+    write_agent com.jarvis.boot true true "$ROOT/computer/boot" "$ROOT/computer/boot/bootkey" "$ROOT/computer/boot/boot.sh"
+    load_agent com.jarvis.boot
+    ok "Boot key: hold Space for 3 s to wake everything with the intro (allow 'bootkey' in System Settings > Privacy > Input Monitoring)"
+  else
+    echo "    (no Swift compiler -- skipping the Space-bar boot key; install Xcode Command Line Tools to get it)"
+  fi
+}
 
 if [ "$MODE" = "pet" ]; then
   load_agent com.jarvis.pet
   launchctl kickstart "gui/$UID_NUM/com.jarvis.pet" 2>/dev/null || true
+  install_bootkey
   say "Done! Your pet is on screen."
   cat <<'EOF'
     • Click the 🐾 in the menu bar -> "Goals & reminders…" to add goals, people
       to stay in touch with, reminder settings -- and pick your pet.
-    • The pet starts with your Mac. Remove everything with ./uninstall.sh.
+    • The pet starts with your Mac -- or hold Space for 3 s for its wake-up intro.
+      Remove everything with ./uninstall.sh.
     • Want the voice assistant too? Run ./install.sh (without --pet-only).
 EOF
   exit 0
@@ -165,20 +178,12 @@ fi
 
 # --- 4. services ----------------------------------------------------------------------
 say "Services"
-write_agent com.jarvis.voice-wake false false "$ROOT/computer/voice" "$VENV/bin/python3" "$ROOT/computer/voice/wake_listener.py"
+write_agent com.jarvis.voice-wake true false "$ROOT/computer/voice" "$VENV/bin/python3" "$ROOT/computer/voice/wake_listener.py"
 load_agent com.jarvis.voice-wake
 load_agent com.jarvis.pet
-ok "JARVIS and the pet (off until you start them)"
+ok "JARVIS and the pet (start with your Mac; switch off in PA)"
 
-if have swiftc; then
-  swiftc -O -o "$ROOT/computer/boot/bootkey" "$ROOT/computer/boot/bootkey.swift" 2>/dev/null && {
-    write_agent com.jarvis.boot true true "$ROOT/computer/boot" "$ROOT/computer/boot/bootkey" "$ROOT/computer/boot/boot.sh"
-    load_agent com.jarvis.boot
-    ok "Boot key: hold Space for 3 s to start JARVIS (allow 'bootkey' in System Settings > Privacy > Input Monitoring)"
-  }
-else
-  echo "    (no Swift compiler -- skipping the Space-bar boot key; install Xcode Command Line Tools to get it)"
-fi
+install_bootkey
 
 # PA: the control app (start/stop, voice, threads) in ~/Applications
 PA="$HOME/Applications/PA.app"
@@ -204,8 +209,9 @@ ok "PA control app in ~/Applications"
 
 say "Done!"
 cat <<'EOF'
-    • Start JARVIS: open PA (Spotlight: "PA") and flip the JARVIS switch --
-      or hold Space for 3 seconds. First start loads the model (~30 s).
+    • JARVIS starts with your Mac and listens for "hey Jarvis" (the first wake
+      after a restart plays the boot intro). Stop/start it in PA
+      (Spotlight: "PA"). First start loads the model (~30 s).
     • Then say "hey Jarvis". Try: "give me an update", "remind me in 10 minutes
       to stretch", "remember that ...", "open my CV", "how did I sleep?"
     • macOS will ask once for the microphone, and later for Notes / Mail /

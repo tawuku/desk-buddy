@@ -48,6 +48,7 @@ from openwakeword.model import Model
 
 import activity
 import findings
+import mac_control
 import quick
 import screen_server
 import skills
@@ -183,6 +184,7 @@ PERSONA = (
 # Saying "hey Jarvis" while JARVIS is talking cuts it off (score from the
 # same wake model; no Whisper check -- it has to react instantly).
 BARGE_IN_SCORE = 0.5
+MIC_STALL_SECONDS = 5  # no audio frames this long = the stream died (sleep/wake, device change)
 FAST_HISTORY_TURNS = 4  # remembered question/answer pairs
 FAST_HISTORY_IDLE_RESET_SECONDS = 600  # forget the thread after 10 min quiet
 
@@ -921,6 +923,16 @@ def answer_one(audio: np.ndarray) -> str:
         _remember_reply(done, from_model=False)
         return "answered"
 
+    # Everyday Mac tasks: music, volume, directions, screenshot... (before
+    # the quick replies, so "stop the music" pauses it rather than ending
+    # the conversation).
+    done = mac_control.handle(text)
+    if done:
+        log(f"mac: {done}")
+        say_text(done)
+        _remember_reply(done, from_model=False)
+        return "answered"
+
     # --- instant path: everyday talk from config/quick_replies.json ---------
     offer, _pending_offer = _pending_offer, None
     forced_plan = None
@@ -1011,11 +1023,46 @@ def handle_wake() -> None:
         smarts.restore_music()
 
 
+INTRO_STAMP = JARVIS_DIR / "database" / "pet" / "intro-boot.txt"  # also written by the pet's boot intro
+INTRO_SECONDS = 9.5  # the intro plays ~5 s, greets (via our /say), then fades
+
+
+def _boot_time() -> str:
+    """This boot's identity: kern.boottime seconds."""
+    out = subprocess.run(["sysctl", "-n", "kern.boottime"], capture_output=True, text=True).stdout
+    m = re.search(r"sec = (\d+)", out)
+    return m.group(1) if m else ""
+
+
+def intro_after_reboot() -> bool:
+    """First "hey Jarvis" since the Mac started: play the boot intro on every
+    display (via the pet) instead of the usual hello. False if it already
+    played this boot, or the pet isn't running."""
+    boot = _boot_time()
+    try:
+        seen = INTRO_STAMP.read_text().strip()
+    except OSError:
+        seen = ""
+    if not boot or seen == boot:
+        return False
+    try:
+        urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8092/boot", data=b"{}", method="POST"), timeout=2)
+    except Exception:  # noqa: BLE001
+        return False
+    INTRO_STAMP.parent.mkdir(parents=True, exist_ok=True)
+    INTRO_STAMP.write_text(boot)
+    log("first wake since the Mac started: boot intro")
+    time.sleep(INTRO_SECONDS)
+    return True
+
+
 def _conversation() -> None:
     log(f"wake word detected (speech threshold {speech_threshold():.0f})")
     # The screen's briefing opens with its own greeting; the usual spoken
     # hello is the fallback when it's off or can't be shown (pet not running).
-    if brief_on_wake() and present_briefing_on_screen():
+    if intro_after_reboot():
+        push_panel_state("listening")
+    elif brief_on_wake() and present_briefing_on_screen():
         push_panel_state("listening")
         if _barged.is_set():
             play_cue(LISTEN_CUE)  # interrupted: "yes? go ahead"
@@ -1077,6 +1124,30 @@ def _reminder_card(reminder: dict, line: str) -> None:
     except Exception:  # noqa: BLE001 -- pet not running: the spoken line + notification still happen
         pass
     log(f"reminder: {line}")
+
+
+def keep_awake_loop() -> None:
+    """Idle sleep would pause everything, the mic included. While plugged in
+    (config/voice.json "keep_awake": "plugged_in", the default), hold a
+    `caffeinate -i` so the Mac doesn't idle-sleep -- the display still turns
+    off as usual. "always" also on battery; "off" never. Closing the lid
+    sleeps the Mac regardless."""
+    proc: subprocess.Popen | None = None
+    while True:
+        try:
+            mode = json.loads(tts.VOICE_CONFIG_FILE.read_text()).get("keep_awake", "plugged_in")
+        except (OSError, ValueError):
+            mode = "plugged_in"
+        plugged = "AC Power" in subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True).stdout
+        want = mode == "always" or (mode == "plugged_in" and plugged)
+        if want and (proc is None or proc.poll() is not None):
+            proc = subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+            log("keeping the Mac awake for 'hey Jarvis' (display can still sleep)")
+        elif not want and proc is not None and proc.poll() is None:
+            proc.terminate()
+            proc = None
+            log("on battery: normal sleep allowed")
+        time.sleep(60)
 
 
 def briefing_scheduler() -> None:
@@ -1153,6 +1224,7 @@ def main() -> None:
     start_llama_server()
     start_whisper_server()
     threading.Thread(target=briefing_scheduler, daemon=True).start()
+    threading.Thread(target=keep_awake_loop, daemon=True).start()
     screen_server.start()
     threading.Thread(target=smarts.reminder_loop, args=(_say_reminder, _reminder_card, notify), daemon=True).start()
     log("loading wake-word model...")
@@ -1181,61 +1253,76 @@ def main() -> None:
     window_frames = int(CONFIRM_WINDOW_SECONDS * SAMPLE_RATE / FRAME_SAMPLES)
     confirm_at: float | None = None
     unsure_peak = 0.0
-    with sd.InputStream(
-        samplerate=SAMPLE_RATE,
-        channels=1,
-        dtype="int16",
-        blocksize=FRAME_SAMPLES,
-        callback=callback,
-    ):
-        while True:
-            frame = audio_q.get()
-            scores = model.predict(frame)
-            score = scores.get("hey_jarvis", 0.0)
-            now = time.monotonic()
-            recent_audio = (recent_audio + [frame])[-window_frames:]
+    while True:  # the mic stream is reopened if it goes silent (Mac woke from sleep, mic changed)
+        try:
+            with sd.InputStream(
+                samplerate=SAMPLE_RATE,
+                channels=1,
+                dtype="int16",
+                blocksize=FRAME_SAMPLES,
+                callback=callback,
+            ):
+                while True:
+                    frame = audio_q.get(timeout=MIC_STALL_SECONDS)
+                    scores = model.predict(frame)
+                    score = scores.get("hey_jarvis", 0.0)
+                    now = time.monotonic()
+                    recent_audio = (recent_audio + [frame])[-window_frames:]
 
-            recent_rms = (recent_rms + [float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))])[-125:]
-            if len(recent_rms) >= 25:
-                _noise_floor_rms = float(np.percentile(recent_rms, 30))
-            peak_score = max(peak_score, score)
-            if NEAR_MISS_LOG_SCORE <= score < DETECTION_THRESHOLD and now - last_near_miss >= 1.0:
-                last_near_miss = now
-                log(f"near miss: 'hey Jarvis' score {score:.2f} (needs {DETECTION_THRESHOLD})")
-            if now - last_heartbeat >= HEARTBEAT_SECONDS:
-                log(f"alive: mic noise floor {_noise_floor_rms:.0f}, peak wake score {peak_score:.2f} in last {HEARTBEAT_SECONDS // 60} min")
-                peak_score = 0.0
-                last_heartbeat = now
-            wake = False
-            if (now - last_trigger) >= COOLDOWN_SECONDS:
-                if score >= DETECTION_THRESHOLD:
-                    wake = True
-                elif score >= CONFIRM_MIN_SCORE and confirm_at is None:
-                    confirm_at = now + CONFIRM_TAIL_SECONDS
-                unsure_peak = max(unsure_peak, score) if confirm_at else 0.0
-                if not wake and confirm_at is not None and now >= confirm_at:
-                    log(f"unsure detection (score {unsure_peak:.2f}), checking with Whisper")
-                    wake = confirm_wake(recent_audio)
-                    confirm_at, unsure_peak = None, 0.0
-                    if not wake:
-                        last_trigger = now - COOLDOWN_SECONDS + 1.0  # brief pause before re-checking
-            if wake:
-                confirm_at, unsure_peak = None, 0.0
-                last_trigger = now
-                try:
-                    handle_wake()
-                except Exception as exc:  # noqa: BLE001
-                    log(f"error handling wake: {exc!r}")
-                # Drop audio queued while handling (JARVIS's own speech, a
-                # multi-minute wait for the reply) so the backlog isn't
-                # scored as fresh wake-word input.
-                try:
-                    while True:
-                        audio_q.get_nowait()
-                except queue.Empty:
-                    pass
-                model.reset()
-                recent_audio = []
+                    recent_rms = (recent_rms + [float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))])[-125:]
+                    if len(recent_rms) >= 25:
+                        _noise_floor_rms = float(np.percentile(recent_rms, 30))
+                    peak_score = max(peak_score, score)
+                    if NEAR_MISS_LOG_SCORE <= score < DETECTION_THRESHOLD and now - last_near_miss >= 1.0:
+                        last_near_miss = now
+                        log(f"near miss: 'hey Jarvis' score {score:.2f} (needs {DETECTION_THRESHOLD})")
+                    if now - last_heartbeat >= HEARTBEAT_SECONDS:
+                        log(f"alive: mic noise floor {_noise_floor_rms:.0f}, peak wake score {peak_score:.2f} in last {HEARTBEAT_SECONDS // 60} min")
+                        peak_score = 0.0
+                        last_heartbeat = now
+                    wake = False
+                    if (now - last_trigger) >= COOLDOWN_SECONDS:
+                        if score >= DETECTION_THRESHOLD:
+                            wake = True
+                        elif score >= CONFIRM_MIN_SCORE and confirm_at is None:
+                            confirm_at = now + CONFIRM_TAIL_SECONDS
+                        unsure_peak = max(unsure_peak, score) if confirm_at else 0.0
+                        if not wake and confirm_at is not None and now >= confirm_at:
+                            log(f"unsure detection (score {unsure_peak:.2f}), checking with Whisper")
+                            wake = confirm_wake(recent_audio)
+                            confirm_at, unsure_peak = None, 0.0
+                            if not wake:
+                                last_trigger = now - COOLDOWN_SECONDS + 1.0  # brief pause before re-checking
+                    if wake:
+                        confirm_at, unsure_peak = None, 0.0
+                        last_trigger = now
+                        try:
+                            handle_wake()
+                        except Exception as exc:  # noqa: BLE001
+                            log(f"error handling wake: {exc!r}")
+                        # Drop audio queued while handling (JARVIS's own speech, a
+                        # multi-minute wait for the reply) so the backlog isn't
+                        # scored as fresh wake-word input.
+                        try:
+                            while True:
+                                audio_q.get_nowait()
+                        except queue.Empty:
+                            pass
+                        model.reset()
+                        recent_audio = []
+
+        except queue.Empty:
+            log(f"mic silent for {MIC_STALL_SECONDS}s (Mac slept or the mic changed) -- reopening it")
+        except sd.PortAudioError as exc:
+            log(f"mic error ({exc}) -- reopening it")
+            time.sleep(2)
+        # Re-scan audio devices so a reconnected / default-changed mic is used.
+        try:
+            sd._terminate()
+            sd._initialize()
+        except Exception:  # noqa: BLE001
+            pass
+        model.reset()
 
 
 if __name__ == "__main__":

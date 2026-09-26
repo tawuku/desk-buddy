@@ -15,6 +15,8 @@ fully local voice assistant behind it. No cloud, no account, no subscription.
 | "Hey Jarvis" voice assistant, running 100% on your Mac | | ✓ |
 | Full-screen daily briefing on every display | | ✓ |
 | Reminders & timers, memory, Apple Notes, documents, web previews by voice | | ✓ |
+| Music, volume, directions, screenshots, battery... by voice | | ✓ |
+| Hold Space for 3 s: wake-up intro on every display | ✓ | ✓ |
 | Needs | macOS + Node.js | + Homebrew, ~2 GB disk |
 
 ## Install
@@ -70,10 +72,19 @@ Say **"hey Jarvis"**, then talk. Everything runs locally: wake word
 - "I worked out today", "add a goal to read 3 times a week"
 - "Open my CV" (and it tells you what's in it), "summarize it",
   "preview example.com", "read my latest note"
+- "Play some music", "play Burna Boy", "pause", "next song", "what's playing?"
+  (Spotify or Music), "set the volume to 40"
+- "How do I get to Frankfurt?" -- drive time and distance, route opened in
+  Apple Maps (also "by bike", "on foot", "by train")
+- "Take a screenshot", "lock my screen", "how's my battery?", "turn on dark
+  mode", "quit Spotify"
 - "Thanks" / "that's all" / "go to sleep" ends the conversation.
 
-Start it from **PA** (the control app in ~/Applications) or hold **Space for
-3 seconds** after turning on your Mac for the boot intro:
+JARVIS starts with your Mac and listens for "hey Jarvis" -- the **first
+wake after a restart plays the boot intro** (or hold **Space for 3 seconds**
+any time). While plugged in it keeps your Mac from idle-sleeping so it can
+still hear you (the display turns off as usual; set `"keep_awake"` in
+`config/voice.json` to `"always"` or `"off"`). Stop / start it in **PA**:
 
 <p>
   <img src="docs/screenshots/boot.png" width="49%" alt="Boot intro while JARVIS starts up">

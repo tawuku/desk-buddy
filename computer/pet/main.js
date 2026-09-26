@@ -683,11 +683,22 @@ function closeBoot() {
 
 function showBoot() {
   closeBoot();
+  // Remember that the intro played this boot, so the first "hey Jarvis"
+  // doesn't play it again (computer/voice/wake_listener.py intro_after_reboot).
+  exec('sysctl -n kern.boottime', (err, out) => {
+    const m = !err && String(out).match(/sec = (\d+)/);
+    if (!m) return;
+    try {
+      fs.mkdirSync(STATE_DIR, { recursive: true });
+      fs.writeFileSync(path.join(STATE_DIR, 'intro-boot.txt'), m[1]);
+    } catch { /* best-effort */ }
+  });
   const primary = screen.getPrimaryDisplay();
   const displays = [primary, ...screen.getAllDisplays().filter((d) => d.id !== primary.id)];
   const hour = new Date().getHours();
   const part = hour >= 5 && hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
-  const greeting = `Good ${part}, ${userName()}. JARVIS is online.`;
+  const name = userNameFromConfig();
+  const greeting = FULL_JARVIS ? `Good ${part}, ${userName()}. JARVIS is online.` : `Good ${part}${name ? `, ${name}` : ''}! I'm up.`;
   bootWins = displays.map((display, i) => {
     const w = new BrowserWindow({
       ...display.bounds,
@@ -701,7 +712,7 @@ function showBoot() {
     w.setBounds(display.bounds);
     w.once('ready-to-show', () => (i === 0 ? w.show() : w.showInactive()));
     w.loadFile(path.join(JARVIS_ROOT, 'computer', 'screen', 'boot.html'), {
-      query: { greeting, ...(i > 0 ? { role: 'mirror' } : {}) },
+      query: { greeting, ...(i > 0 ? { role: 'mirror' } : {}), ...(FULL_JARVIS ? {} : { petOnly: '1' }) },
     });
     return w;
   });
@@ -709,7 +720,10 @@ function showBoot() {
   let greeted = false;
   const up = { voice: false, speech: false, model: false }; // sticky: a busy moment isn't "down"
   bootTimer = setInterval(async () => {
-    const [voice, speech, model] = await Promise.all([checkPortUp(8094, '/screen/poll'), checkPortUp(8093), checkHealthy(8080, '/health')]);
+    // Pet only: nothing else to wait for -- the intro just plays.
+    const [voice, speech, model] = FULL_JARVIS
+      ? await Promise.all([checkPortUp(8094, '/screen/poll'), checkPortUp(8093), checkHealthy(8080, '/health')])
+      : [true, true, true];
     up.voice ||= voice;
     up.speech ||= speech;
     up.model ||= model;
@@ -718,7 +732,9 @@ function showBoot() {
     for (const w of bootWins) if (!w.isDestroyed()) w.webContents.send('boot-status', status);
     if (ready && !greeted) {
       greeted = true;
-      sayViaJarvis(greeting);
+      if (FULL_JARVIS) sayViaJarvis(greeting);
+      // The pet waves hello as the intro ends (its speech bubble has the greeting).
+      setTimeout(() => sendToPet('pet-greet', greeting.replace(' JARVIS is online.', '')), FULL_JARVIS ? 5500 : 6000);
     }
     if (status.timedOut) clearInterval(bootTimer);
   }, 600);

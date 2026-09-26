@@ -71,6 +71,14 @@
 <script>
 const params = new URLSearchParams(location.search);
 const MIRROR = params.get('role') === 'mirror';
+// Pet-only installs (./install.sh --pet-only): the same intro, for the pet.
+const PET_ONLY = params.get('petOnly') === '1';
+if (PET_ONLY) {
+  document.querySelector('#top span').textContent = 'DESK-BUDDY // WAKING UP';
+  document.querySelector('#title .sub').textContent = 'YOUR LITTLE HELPER IS WAKING UP';
+  const rows = { hud: 'DESKTOP PET', voice: 'GOALS & REMINDERS', speech: 'POP-UP CARDS', model: 'HEALTH SYNC' };
+  for (const [k, label] of Object.entries(rows)) document.querySelector(`.sys[data-k="${k}"] span`).textContent = label;
+}
 const GREETING = params.get('greeting') || 'Good day. JARVIS is online.';
 const MIN_INTRO_MS = 5200;   // the intro plays at least this long, even if everything is already up
 const HOLD_ONLINE_MS = 3800; // greeting on screen before fading out
@@ -166,7 +174,7 @@ requestAnimationFrame(draw);
 
 // ---- title, clock, log ---------------------------------------------------------
 setTimeout(() => {
-  const name = 'J.A.R.V.I.S'; let i = 0;
+  const name = PET_ONLY ? 'DESK·BUDDY' : 'J.A.R.V.I.S'; let i = 0;
   const type = setInterval(() => { $('name').textContent = name.slice(0, ++i); if (i >= name.length) { clearInterval(type); $('name').classList.add('glitch'); $('title').classList.add('subon'); } }, 85);
 }, 1300);
 setInterval(() => { const d = new Date(); $('clock').textContent = d.toLocaleTimeString('en-GB'); }, 250);
@@ -181,10 +189,16 @@ const SCRIPT = [
   '> linking HUD interface', '> starting whisper speech engine', '> starting local language model (qwen3)', '> warming piper voice',
   '> indexing project folders', '> syncing briefing cache', '> checking network uplink', '> handshake with desktop companion',
 ];
-SCRIPT.forEach((line, i) => setTimeout(() => log(line), 400 + i * 330));
+const PET_SCRIPT = [
+  '> power-on self test ................ ok', '> waking your pet', '> stretching ........................ ok', '> loading goals & streaks',
+  '> checking reminders for today', '> syncing health data', '> finding a good spot on screen', '> practising the wave',
+];
+(PET_ONLY ? PET_SCRIPT : SCRIPT).forEach((line, i) => setTimeout(() => log(line), 400 + i * 330));
 
 // ---- live status -----------------------------------------------------------------
-const LABEL = { hud: 'HUD interface', voice: 'voice engine', speech: 'speech recognition', model: 'local model' };
+const LABEL = PET_ONLY
+  ? { hud: 'desktop pet', voice: 'goals & reminders', speech: 'pop-up cards', model: 'health sync' }
+  : { hud: 'HUD interface', voice: 'voice engine', speech: 'speech recognition', model: 'local model' };
 const seen = {};
 let finished = false;
 function onStatus(st) {

@@ -1,5 +1,6 @@
 #!/bin/bash
-# Boot JARVIS with the intro -- run by bootkey when Space is held for 3s
+# Boot JARVIS + the pet (or just the pet, on --pet-only installs) with the
+# intro -- run by bootkey when Space is held for 3s
 # (or by hand: `bash boot.sh`, or `bash boot.sh --intro` to replay the intro
 # even though JARVIS is already on).
 #
@@ -12,8 +13,10 @@ UID_NUM=$(id -u)
 AGENTS="$HOME/Library/LaunchAgents"
 LOCK="${TMPDIR:-/tmp}/jarvis-boot.lock"
 
-if launchctl list com.jarvis.voice-wake >/dev/null 2>&1 && [ "${1:-}" != "--intro" ]; then
-  echo "[boot] JARVIS is already on -- nothing to do"
+# Already running: just replay the intro.
+if curl -s -m 1 -X POST http://127.0.0.1:8092/boot >/dev/null 2>&1 && \
+   { [ "$(cat "$(dirname "$0")/../../config/mode" 2>/dev/null)" = "pet" ] || launchctl list com.jarvis.voice-wake >/dev/null 2>&1; }; then
+  echo "[boot] already on -- replayed the intro"
   exit 0
 fi
 mkdir "$LOCK" 2>/dev/null || { echo "[boot] already booting"; exit 0; }
@@ -34,5 +37,8 @@ for _ in $(seq 1 60); do
   sleep 0.25
 done
 
-echo "[boot] starting JARVIS"
-start com.jarvis.voice-wake
+# Pet-only installs have no JARVIS to start.
+if [ "$(cat "$(dirname "$0")/../../config/mode" 2>/dev/null)" != "pet" ]; then
+  echo "[boot] starting JARVIS"
+  start com.jarvis.voice-wake
+fi

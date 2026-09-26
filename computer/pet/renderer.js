@@ -39,6 +39,9 @@
   if (pet.getCharacter) pet.getCharacter().then((c) => { if (c) character = c; }).catch(() => {});
   if (pet.onCharacter) pet.onCharacter((c) => { character = c; startAct('hello', { ...IDLE.wave, say: ['New look! How do I look?', 'Ta-da, it’s me!'], p: 1 }); });
 
+  // After the boot intro: a big wave with the greeting.
+  if (pet.onGreet) pet.onGreet((text) => startAct('greet', { ...IDLE.wave, d: 3200, say: [text], p: 1 }, true));
+
   // Reminder cards (reminders.js): face you while one is up, celebrate a "done".
   if (pet.onReact) {
     pet.onReact((kind) => {

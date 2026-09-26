@@ -10,4 +10,5 @@ contextBridge.exposeInMainWorld('pet', {
   getUserName: () => ipcRenderer.invoke('pet-get-name'),
   onCharacter: (callback) => ipcRenderer.on('pet-character', (_event, c) => callback(c)),
   onReact: (callback) => ipcRenderer.on('pet-react', (_event, kind) => callback(kind)),
+  onGreet: (callback) => ipcRenderer.on('pet-greet', (_event, text) => callback(text)),
 });
