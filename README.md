@@ -3,6 +3,8 @@
 A little companion that lives on your Mac's screen -- and, if you want, a
 fully local voice assistant behind it. No cloud, no account, no subscription.
 
+![The five pets: Little man, Tux the cat, Bao the panda, Bolt the robot, Fin the fox](docs/screenshots/pets.png)
+
 **Two ways to use it:**
 
 | | Pet only | JARVIS + Pet |
@@ -36,6 +38,12 @@ types on a laptop while you code, scrolls a phone while you browse, wears a
 headset on calls, dances to music, dozes when you're away -- and cracks the
 odd joke. Click it, drag it, see what happens.
 
+<p>
+  <img src="docs/screenshots/reminder-card.png" width="300" alt="A mood check-in card popping up above Tux the cat">
+  <img src="docs/screenshots/goals.png" width="270" alt="The Goals & reminders window">
+  <img src="docs/screenshots/goals-pets.png" width="270" alt="Picking a pet">
+</p>
+
 **Goals & reminders** (🐾 menu): log daily / weekly / monthly goals and the
 people you want to stay in touch with. Your pet pops up small cards: goal
 check-ins, water breaks, a mood check-in, "you haven't called Mom in 12 days",
@@ -54,6 +62,9 @@ Say **"hey Jarvis"**, then talk. Everything runs locally: wake word
 
 - "Give me an update" -- a full-screen briefing on all your screens:
   priorities, goals, health, notes, weather, inbox, projects, news.
+
+  ![The JARVIS briefing screen, presenting the day's findings (demo data)](docs/screenshots/jarvis-briefing.png)
+
 - "Remind me to call Mom at 6", "set a timer for 10 minutes"
 - "Remember that Anna loves sunflowers" (used in later answers)
 - "I worked out today", "add a goal to read 3 times a week"
@@ -62,7 +73,17 @@ Say **"hey Jarvis"**, then talk. Everything runs locally: wake word
 - "Thanks" / "that's all" / "go to sleep" ends the conversation.
 
 Start it from **PA** (the control app in ~/Applications) or hold **Space for
-3 seconds** after turning on your Mac for the boot intro. Settings:
+3 seconds** after turning on your Mac for the boot intro:
+
+<p>
+  <img src="docs/screenshots/boot.png" width="49%" alt="Boot intro while JARVIS starts up">
+  <img src="docs/screenshots/boot-online.png" width="49%" alt="Boot intro: all systems online">
+</p>
+
+While idle, JARVIS waits as a breathing particle orb:
+
+![JARVIS standing by](docs/screenshots/jarvis-idle.png)
+ Settings:
 `config/jarvis_sources.json` (your name, city, news feeds, project folders).
 
 ## Privacy
