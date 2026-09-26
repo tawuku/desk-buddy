@@ -441,6 +441,11 @@ _KW = {
                 r"my day|status report|what'?s new|update me|(any|my|the|daily|latest|today'?s|an|some) updates?(?!\s+(on|about|for|from|to|of)\b))\b",
     "projects": r"\b(projects?|work(ing)? on|progress|updates?)\b",
     "search": r"\b(search|look up|google|who (is|was|won)|latest|current(ly)?|price of|score|release date|when (is|was|does)|how much (is|does))\b",
+    # Your own sites' admin numbers (business.py) -- "how's <site> doing?"
+    # (Your own site names are added from config/business.json in route().)
+    "business": r"\b(how('?s| is| are) (the (site|shop|platform|business)|my (sites|websites|business|platforms|shop))( \w+)? (doing|performing|going)|"
+                r"business (update|stats|numbers)|how('?s| is) business|sign ?ups?|signups|registrations|revenue|sales|pipeline|"
+                r"(new |any )?(orders|leads|deals)|visitors|traffic|admin (portal|dashboard)|approvals?|site stats)\b",
     "notes": r"\b(my notes?|apple notes|notes app|latest note|last note|newest note|new notes?|recent notes?|in my notes|"
              r"what did i (write|note|jot)|note (about|on|called)|notes (about|on))\b",
     "health": r"\b(how (did|have) i (sleep|slept)|my sleep|sleep (last night|score)|how many steps|my steps|steps (today|so far)|"
@@ -468,10 +473,27 @@ _ACTIONS = [
 ]
 
 
+def _site_named(t: str) -> str | None:
+    """A site (or group) from config/business.json mentioned in t -- also as
+    speech recognition tends to hear it ("my shop" for "MyShop")."""
+    try:
+        import business
+        names = business.names()
+    except Exception:  # noqa: BLE001
+        return None
+    for n in sorted(names, key=len, reverse=True):
+        spaced = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", n).lower()          # "MyShop" -> "my shop"
+        variants = {n.lower(), spaced, spaced.replace(" ", "")}
+        if any(re.search(rf"\b{re.escape(v)}\b", t) for v in variants if v):
+            return n
+    return None
+
+
 def route(text: str, src: dict) -> dict:
     """Decide which sources a question needs. Returns {"skills": [...],
     "projects": [names] or None}."""
     t = text.lower()
+    site = _site_named(t)
     for name, pat in _ACTIONS:
         if re.search(pat, t):
             return {"skills": [name], "projects": None}
@@ -487,6 +509,8 @@ def route(text: str, src: dict) -> dict:
         return {"skills": ["briefing"], "projects": None}
     if "notes" in skills:
         return {"skills": ["notes"], "projects": None}
+    if "business" in skills or (site and re.search(r"\b(doing|performing|going|stats|numbers)\b", t)):
+        return {"skills": ["business"], "projects": None}
     # "What was I working on?" is about the Mac, not a project status
     # report -- unless a project is named.
     if "activity" in skills and not named:
@@ -515,6 +539,11 @@ def gather(plan: dict, text: str, step: StepFn = _noop_step) -> str:
             blocks.append(projects(src, plan.get("projects"), step))
         elif skill == "search":
             blocks.append(web_search(text, step))
+        elif skill == "business":
+            import business
+            step("Your sites", "running", "")
+            blocks.append(business.summary(_site_named(text.lower())))
+            step("Your sites", "done", "")
         elif skill == "notes":
             import notes
             blocks.append(notes.context_for(text, step))

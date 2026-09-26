@@ -78,6 +78,9 @@ Say **"hey Jarvis"**, then talk. Everything runs locally: wake word
   Apple Maps (also "by bike", "on foot", "by train")
 - "Take a screenshot", "lock my screen", "how's my battery?", "turn on dark
   mode", "quit Spotify"
+- "How's my shop doing?", "any new orders?" -- your own websites' admin
+  numbers (sign-ups, orders, revenue, approvals waiting), with pet cards when
+  something happens. See [computer/business/README.md](computer/business/README.md).
 - "Thanks" / "that's all" / "go to sleep" ends the conversation.
 
 JARVIS starts with your Mac and listens for "hey Jarvis" -- the **first

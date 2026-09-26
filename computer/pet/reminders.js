@@ -193,6 +193,10 @@ ipcMain.handle('popup-action', (_e, action) => {
       if (action === 'snooze') reply = "Okay, I'll remind you again in 10 minutes.";
       break;
     }
+    case 'info':
+      if (action === 'open' && /^https?:\/\//.test(card.url || '')) require('electron').shell.openExternal(card.url);
+      if (action === 'open') ctx.react('celebrate');
+      break;
     case 'health':
       if (action === 'walk') { reply = 'Enjoy the walk! 🌳'; ctx.react('celebrate'); }
       break;
@@ -401,4 +405,15 @@ function showVoiceReminder({ id, text, kind }) {
   });
 }
 
-module.exports = { init, demo, close, showVoiceReminder, isShowing: () => !!current };
+// Something happened on one of your sites (JARVIS business.py, POST 8092/notify/card).
+// Informational: skipped (the briefing has it) during quiet hours, a call,
+// the JARVIS screen, or while another card is up.
+function showInfo({ icon, title, text, url }) {
+  const d = store.load();
+  if (current || ctx.paused() || ctx.screenBusy() || inQuietHours(d.settings) || ctx.petMood() === 'listening') return false;
+  show({ kind: 'info', icon: icon || '📈', title, text, url,
+    buttons: [...(url ? [{ id: 'open', label: 'Open admin', primary: true }] : []), { id: 'ok', label: 'OK', primary: !url }] });
+  return true;
+}
+
+module.exports = { init, demo, close, showVoiceReminder, showInfo, isShowing: () => !!current };

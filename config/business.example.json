@@ -1,0 +1,13 @@
+{
+  "_comment": "Your own websites' admin numbers for JARVIS (computer/voice/business.py). Copy to config/business.json (git-ignored), add a read-only stats endpoint to each site (see computer/business/README.md), then run computer/business/setup-keys.py to generate the keys.",
+  "sites": [
+    {
+      "name": "My shop",
+      "group": "My shop",
+      "url": "https://example.com/api/jarvis/stats.php",
+      "admin_url": "https://example.com/admin/",
+      "key_location": "backend/secrets.php: define('JARVIS_STATS_KEY', '<key>');",
+      "key": ""
+    }
+  ]
+}

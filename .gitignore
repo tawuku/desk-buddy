@@ -51,6 +51,7 @@ engines/bin/
 # --- desk-buddy public repo: personal files stay on this Mac ---------------
 # Your own config (template: config/jarvis_sources.example.json) and install mode
 config/jarvis_sources.json
+config/business.json
 config/mode
 # Personal build history / notes / task list
 DEVELOPMENT_LOG.md

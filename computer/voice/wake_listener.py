@@ -47,6 +47,7 @@ import sounddevice as sd
 from openwakeword.model import Model
 
 import activity
+import business
 import findings
 import mac_control
 import quick
@@ -145,6 +146,7 @@ PHRASES: dict[str, list[str]] = {
     "briefing": ["Sure, here's your briefing.", "Of course. Here's your day."],
     "open_doc": ["On it.", "Opening it now.", "Sure, pulling it up."],
     "read_doc": ["Let me take a look.", "One sec, I'm reading it."],
+    "business": ["Let me check your sites.", "One sec, pulling up the numbers."],
     "health": ["Let me check your health data.", "One sec, looking at your iPhone's numbers."],
     "web_preview": ["Pulling it up now.", "Let me bring that up."],
     "briefing_build": ["Give me a minute to put your briefing together.", "Sure. It'll take me a minute to pull everything together."],
@@ -163,7 +165,7 @@ WAIT_TONE = "/System/Library/Sounds/Purr.aiff"
 # plus whatever live data skills.py fetched (no agent framework).
 FAST_MAX_TOKENS = 100  # short, lively replies; +60 when there's live data
 REPORT_EXTRA_TOKENS = 130  # documents / web pages get a 2-3 sentence report
-ACTION_SKILLS = {"open_doc", "read_doc", "web_preview", "notes"}
+ACTION_SKILLS = {"open_doc", "read_doc", "web_preview", "notes", "business"}
 
 # Stable system prompt (no time or data in it) so llama-server can reuse its
 # processed prefix across turns -- the time, what's on screen and any live
@@ -1126,6 +1128,17 @@ def _reminder_card(reminder: dict, line: str) -> None:
     log(f"reminder: {line}")
 
 
+def _business_card(card: dict) -> None:
+    """Something happened on one of your sites: a card by the pet."""
+    log(f"business: {card['title']} -- {card['text']}")
+    try:
+        req = urllib.request.Request("http://127.0.0.1:8092/notify/card", data=json.dumps(card).encode(), method="POST",
+                                     headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=2)
+    except Exception:  # noqa: BLE001 -- pet not running: the briefing still has it
+        notify(card["title"], card["text"])
+
+
 def keep_awake_loop() -> None:
     """Idle sleep would pause everything, the mic included. While plugged in
     (config/voice.json "keep_awake": "plugged_in", the default), hold a
@@ -1225,6 +1238,7 @@ def main() -> None:
     start_whisper_server()
     threading.Thread(target=briefing_scheduler, daemon=True).start()
     threading.Thread(target=keep_awake_loop, daemon=True).start()
+    threading.Thread(target=business.poll_loop, args=(_business_card,), daemon=True).start()
     screen_server.start()
     threading.Thread(target=smarts.reminder_loop, args=(_say_reminder, _reminder_card, notify), daemon=True).start()
     log("loading wake-word model...")

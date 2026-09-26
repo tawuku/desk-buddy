@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import activity
+import business as business_data
 import health as health_data
 import notes as notes_data
 import skills
@@ -174,6 +175,11 @@ def health(_src: dict) -> dict | None:
     return health_data.category()
 
 
+def business(_src: dict) -> dict | None:
+    """Your sites' admin numbers (business.py); left out without sites."""
+    return business_data.category()
+
+
 def notes(_src: dict) -> dict | None:
     """Apple Notes added / edited since yesterday; left out when none."""
     return notes_data.category()
@@ -325,7 +331,7 @@ def _greeting(name: str) -> str:
 def build(step: skills.StepFn = skills._noop_step) -> dict:
     src = skills.load_sources()
     cats = []
-    for fn in (priority, goals, health, notes, weather, inbox, projects, world, systems):
+    for fn in (priority, business, goals, health, notes, weather, inbox, projects, world, systems):
         label = f"Findings · {fn.__name__}"
         step(label, "running", "")
         try:

@@ -767,6 +767,14 @@ function startPanelServer() {
       res.end('ok');
       return;
     }
+    if (req.method === 'POST' && req.url === '/notify/card') {
+      readJsonBody(req).then((card) => {
+        const shown = card && card.title ? reminders.showInfo(card) : false;
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end(shown ? 'shown' : 'skipped');
+      });
+      return;
+    }
     if (req.method === 'POST' && req.url === '/reminder/card') {
       readJsonBody(req).then((card) => {
         if (card && card.id) reminders.showVoiceReminder(card);
