@@ -1112,7 +1112,9 @@ def answer_text(text: str, emit, speak_it: bool = False) -> None:
             except Exception as exc:  # noqa: BLE001
                 # Right after JARVIS starts, the model server answers 401 / 503 /
                 # refuses connections for a few seconds while the model loads.
-                loading = not pieces and attempt < 11 and re.search(r"401|503|refused|URLError", repr(exc))
+                # (Not timeouts: re-sending to a slow model only queues more work.)
+                loading = (not pieces and attempt < 11 and "timed out" not in repr(exc).lower()
+                           and re.search(r"HTTPError 401|HTTPError 503|refused|No route", repr(exc)))
                 if not loading:
                     log(f"typed answer failed: {exc!r}")
                     return finish("Sorry, I couldn't get an answer just now.", "error")
