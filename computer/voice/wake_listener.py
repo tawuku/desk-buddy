@@ -71,7 +71,11 @@ DETECTION_THRESHOLD = 0.8
 CONFIRM_MIN_SCORE = 0.1
 CONFIRM_WINDOW_SECONDS = 2.5
 CONFIRM_TAIL_SECONDS = 0.4  # let the phrase finish before transcribing
-CONFIRM_PATTERN = re.compile(r"\b(jarvis|jarvi|jervis|javis|charvis)\b", re.I)  # not "travis": a real name
+# The wake phrase is "wake up Jarvis". openWakeWord only ships a "hey jarvis"
+# model, which scores "wake up Jarvis" ~0.4, so it acts as the acoustic gate
+# and Whisper decides: every detection (even a confident one) must be heard
+# as "wake up" + Jarvis. Plain "hey Jarvis" no longer wakes it.
+CONFIRM_PATTERN = re.compile(r"\bwake[\s,.\-]*up\b[\s,.\-]*(jarvis|jarvi|jervis|javis|charvis)\b", re.I)  # not "travis": a real name
 NEAR_MISS_LOG_SCORE = 0.15  # log weaker detections too, to tune the threshold
 HEARTBEAT_SECONDS = 300  # periodic "still alive, mic level X" log line
 COOLDOWN_SECONDS = 2.0  # ignore further detections right after firing once
@@ -448,7 +452,9 @@ _BRACKETED = re.compile(r"\[[^\]]*\]")
 _FILLER_SENTENCE = re.compile(
     r"^(what would you like (to do|me to do) next|what do you think|what's your take|"
     r"(is there )?anything else (i can help (you )?with|you need)|let me know if you need anything( else)?|"
-    r"how can i help( you)?( further)?)\W*$",
+    r"how can i help( you)?( further)?|"
+    r"what('?s| is) (one|the one) thing you('?d| would) like to [\w ]+|what are you (working on|up to)( today| right now)?|"
+    r"(is there|do you have) (anything|something) (specific|in particular)[\w ,']*|would you like (me )?to [\w ,']*)\W*$",
     re.I,
 )
 
@@ -1011,7 +1017,102 @@ def answer_one(audio: np.ndarray) -> str:
     return "barged" if _barged.is_set() else "answered"
 
 
-def handle_wake() -> None:
+_typed_lock = threading.Lock()  # one typed question at a time (the model serves one request)
+
+
+def answer_text(text: str, emit, speak_it: bool = False) -> None:
+    """Typed questions (the chat window, via screen_server POST /ask): the
+    same brain as answer_one -- instant layers first, then route + live data
+    + the model -- but streamed back as text instead of spoken, so it's
+    quicker (no speech recognition, no voice rendering).
+    emit({"type": "status"|"token"|"done", ...})."""
+    global _pending_offer
+    text = text.strip()[:1000]
+    if not text:
+        emit({"type": "done", "text": ""})
+        return
+    with _typed_lock:
+        started = time.monotonic()
+        log(f"typed: {text!r}")
+
+        def finish(reply: str, source: str) -> None:
+            reply = reply.strip()
+            emit({"type": "done", "text": reply, "source": source, "seconds": round(time.monotonic() - started, 1)})
+            log(f"typed reply ({source}, {time.monotonic() - started:.1f}s): {reply[:120]!r}")
+            if speak_it and reply:
+                threading.Thread(target=_say_reminder, args=(clean_for_speech(reply),), daemon=True).start()
+
+        # Instant layers, same order as by voice.
+        for label, fn in (("screen", screen_command), ("mac", mac_control.handle)):
+            done = fn(text)
+            if done:
+                _remember_reply(done, from_model=False)
+                return finish(done, label)
+        offer, _pending_offer = _pending_offer, None
+        forced_plan = None
+        if offer == "briefing" and quick.is_yes(text):
+            forced_plan = {"skills": ["briefing"], "projects": None}
+        else:
+            intent = quick.match(text, after_question=_last_reply_was_question)
+            if intent:
+                reply = quick.reply_for(intent, _last_reply) or "Done."
+                if intent.get("name") != "repeat":
+                    _remember_reply(reply, from_model=False)
+                _pending_offer = intent.get("offer")
+                return finish(reply, "quick")
+            try:
+                smart = smarts.handle(text)
+            except Exception as exc:  # noqa: BLE001
+                log(f"smarts failed: {exc!r}")
+                smart = None
+            if smart:
+                _remember_reply(smart, from_model=False)
+                return finish(smart, "smart")
+
+        plan = forced_plan or skills.route(text, skills.load_sources())
+        if plan["skills"] == ["briefing"]:
+            if screen_server.open_screen(autostart=True):
+                return finish("Your briefing is on the screen now.", "briefing")
+            data = skills.load_briefing(max_age_hours=12)
+            return finish(data["text"] if data else "Your briefing isn't ready yet -- ask me again in a minute.", "briefing")
+
+        def step(label: str, status: str, detail: str = "") -> None:
+            if status == "running":
+                emit({"type": "status", "text": label})
+
+        context = ""
+        if plan["skills"]:
+            emit({"type": "status", "text": "Looking that up…"})
+            context = skills.gather(plan, text, step)
+        emit({"type": "status", "text": "Thinking…"})
+        report = bool(set(plan["skills"]) & ACTION_SKILLS)
+        messages = _build_messages(text, context)
+        pieces: list[str] = []
+        shown = ""
+        try:
+            for piece in skills.llm_stream(messages, max_tokens=FAST_MAX_TOKENS + (REPORT_EXTRA_TOKENS if report else 60 if context else 40),
+                                           cancel=lambda: False, stats={}):
+                pieces.append(piece)
+                visible = _BRACKETED.sub("", "".join(pieces))
+                if visible.lstrip().startswith("["):
+                    continue  # an echoed [header] that isn't closed yet -- don't show it
+                visible = visible.lstrip()
+                if len(visible) > len(shown):
+                    emit({"type": "token", "text": visible[len(shown):]})
+                    shown = visible
+        except Exception as exc:  # noqa: BLE001
+            log(f"typed answer failed: {exc!r}")
+            return finish("Sorry, I couldn't get an answer just now -- is the model still loading?", "error")
+        # Final text: drop stock sign-offs ("What would you like to do next?").
+        sentences = re.split(r"(?<=[.!?])\s+", _BRACKETED.sub("", "".join(pieces)).strip())
+        reply = " ".join(x for x in sentences if not _FILLER_SENTENCE.match(x.strip())).strip() or shown.strip()
+        _fast_history.extend([{"role": "user", "content": text}, {"role": "assistant", "content": reply}])
+        del _fast_history[: max(0, len(_fast_history) - 2 * FAST_HISTORY_TURNS)]
+        _remember_reply(reply, from_model=True)
+        finish(reply, "model")
+
+
+def handle_wake(skip_greeting: bool = False) -> None:
     """Greet, then stay in a conversation: keep taking questions (no need to
     say "hey Jarvis" again) until CONVERSATION_IDLE_SECONDS pass with no
     speech, then go back to wake-word listening."""
@@ -1019,7 +1120,7 @@ def handle_wake() -> None:
     _in_conversation = True
     smarts.duck_music()  # music down while we talk (JARVIS hears you better too)
     try:
-        _conversation()
+        _conversation(skip_greeting)
     finally:
         _in_conversation = False
         smarts.restore_music()
@@ -1058,11 +1159,26 @@ def intro_after_reboot() -> bool:
     return True
 
 
-def _conversation() -> None:
+_force_listen = threading.Event()  # set by POST /listen (the boot key): converse without the wake word
+_mic_ready = False
+
+
+def request_listen() -> bool:
+    if not _mic_ready:
+        return False
+    _force_listen.set()
+    return True
+
+
+def _conversation(skip_greeting: bool = False) -> None:
     log(f"wake word detected (speech threshold {speech_threshold():.0f})")
     # The screen's briefing opens with its own greeting; the usual spoken
     # hello is the fallback when it's off or can't be shown (pet not running).
-    if intro_after_reboot():
+    if skip_greeting:
+        # Boot key: the boot intro already greeted; let it finish, then listen.
+        time.sleep(INTRO_SECONDS)
+        push_panel_state("listening")
+    elif intro_after_reboot():
         push_panel_state("listening")
     elif brief_on_wake() and present_briefing_on_screen():
         push_panel_state("listening")
@@ -1207,6 +1323,16 @@ def warm_model() -> None:
         log(f"model warm-up failed: {exc!r}")
 
 
+def screen_locked() -> bool:
+    """True while the Mac's screen is locked (macOS only lists the
+    CGSSessionScreenIsLocked key in the console session while it is)."""
+    try:
+        out = subprocess.run(["ioreg", "-n", "Root", "-d1", "-a"], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "CGSSessionScreenIsLocked" in out
+
+
 def confirm_wake(frames: list[np.ndarray]) -> bool:
     """Whisper check of recent audio for an unsure detection. Hinted with
     "Hey Jarvis." -- tested: real "hey Jarvis" in 3 voices over room noise
@@ -1216,7 +1342,7 @@ def confirm_wake(frames: list[np.ndarray]) -> bool:
         wav_path = Path(tmp.name)
     try:
         save_wav(np.concatenate(frames), wav_path)
-        text = transcribe(wav_path, prompt="Hey Jarvis.")
+        text = transcribe(wav_path, prompt="Wake up, Jarvis.")
     finally:
         wav_path.unlink(missing_ok=True)
     ok = bool(CONFIRM_PATTERN.search(text))
@@ -1239,12 +1365,16 @@ def main() -> None:
     threading.Thread(target=briefing_scheduler, daemon=True).start()
     threading.Thread(target=keep_awake_loop, daemon=True).start()
     threading.Thread(target=business.poll_loop, args=(_business_card,), daemon=True).start()
+    screen_server.ask_handler = answer_text  # the chat window (POST /ask)
+    screen_server.listen_handler = request_listen
     screen_server.start()
     threading.Thread(target=smarts.reminder_loop, args=(_say_reminder, _reminder_card, notify), daemon=True).start()
     log("loading wake-word model...")
     model = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
     threading.Thread(target=warm_phrase_cache, daemon=True).start()
-    log("ready, listening for 'hey Jarvis'")
+    log("ready, listening for 'wake up Jarvis'")
+    global _mic_ready
+    _mic_ready = True
 
     audio_q: "queue.Queue[np.ndarray]" = queue.Queue()
     global _wake_model, _audio_q
@@ -1267,6 +1397,19 @@ def main() -> None:
     window_frames = int(CONFIRM_WINDOW_SECONDS * SAMPLE_RATE / FRAME_SAMPLES)
     confirm_at: float | None = None
     unsure_peak = 0.0
+    lock_state = {"at": 0.0, "locked": False}
+
+    def now_locked(now: float) -> bool:
+        """Not listening while the screen is locked (checked every 2s)."""
+        if now - lock_state["at"] >= 2.0:
+            lock_state["at"] = now
+            locked = screen_locked()
+            if locked != lock_state["locked"]:
+                log("screen locked: not listening" if locked else "screen unlocked: listening again")
+                model.reset()
+            lock_state["locked"] = locked
+        return lock_state["locked"]
+
     while True:  # the mic stream is reopened if it goes silent (Mac woke from sleep, mic changed)
         try:
             with sd.InputStream(
@@ -1278,6 +1421,9 @@ def main() -> None:
             ):
                 while True:
                     frame = audio_q.get(timeout=MIC_STALL_SECONDS)
+                    if now_locked(time.monotonic()):
+                        confirm_at, unsure_peak = None, 0.0
+                        continue
                     scores = model.predict(frame)
                     score = scores.get("hey_jarvis", 0.0)
                     now = time.monotonic()
@@ -1289,16 +1435,18 @@ def main() -> None:
                     peak_score = max(peak_score, score)
                     if NEAR_MISS_LOG_SCORE <= score < DETECTION_THRESHOLD and now - last_near_miss >= 1.0:
                         last_near_miss = now
-                        log(f"near miss: 'hey Jarvis' score {score:.2f} (needs {DETECTION_THRESHOLD})")
+                        log(f"near miss: wake-word score {score:.2f} (needs {CONFIRM_MIN_SCORE}+)")
                     if now - last_heartbeat >= HEARTBEAT_SECONDS:
                         log(f"alive: mic noise floor {_noise_floor_rms:.0f}, peak wake score {peak_score:.2f} in last {HEARTBEAT_SECONDS // 60} min")
                         peak_score = 0.0
                         last_heartbeat = now
                     wake = False
-                    if (now - last_trigger) >= COOLDOWN_SECONDS:
-                        if score >= DETECTION_THRESHOLD:
-                            wake = True
-                        elif score >= CONFIRM_MIN_SCORE and confirm_at is None:
+                    forced = _force_listen.is_set()
+                    if forced:
+                        _force_listen.clear()
+                        wake = True
+                    if not forced and (now - last_trigger) >= COOLDOWN_SECONDS:
+                        if score >= CONFIRM_MIN_SCORE and confirm_at is None:
                             confirm_at = now + CONFIRM_TAIL_SECONDS
                         unsure_peak = max(unsure_peak, score) if confirm_at else 0.0
                         if not wake and confirm_at is not None and now >= confirm_at:
@@ -1311,7 +1459,7 @@ def main() -> None:
                         confirm_at, unsure_peak = None, 0.0
                         last_trigger = now
                         try:
-                            handle_wake()
+                            handle_wake(skip_greeting=forced)
                         except Exception as exc:  # noqa: BLE001
                             log(f"error handling wake: {exc!r}")
                         # Drop audio queued while handling (JARVIS's own speech, a

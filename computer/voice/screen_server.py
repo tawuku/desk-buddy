@@ -13,6 +13,9 @@ started by wake_listener.py on 127.0.0.1:8094:
                          and the lead's state for the mirror screens
   POST /screen/command   a button pressed on a mirror screen, for the lead
   POST /say   {text}     speak a line out loud (the boot intro's greeting)
+  GET  /chat             the chat window (type to JARVIS)
+  POST /ask   {text}     answer a typed question, streamed as server-sent
+                         events (status / token / done) -- wake_listener.answer_text
 
 The desktop pet (computer/pet/main.js) shows the screen full-screen on every
 display -- the main display's window leads (speaks, runs the briefing), the
@@ -41,6 +44,11 @@ SCREEN_COMMANDS = {"start", "stop", "dismiss", "voice"}  # plus "replay:<n>"
 SCREEN_CONFIG_FILE = Path(__file__).resolve().parent.parent.parent / "config" / "screen.json"
 DEFAULT_SCREEN_CONFIG = {"brief_on_wake": True, "wake_cooldown_minutes": 0}  # serve the cache, rebuild in the background past this age
 ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+# A web page in any browser can send requests to 127.0.0.1 -- so POSTs from a
+# page must come from JARVIS's own pages (the pet's Node requests send no Origin).
+ALLOWED_ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"}
+ask_handler = None  # set by wake_listener: answer_text(text, emit, speak_it)
+listen_handler = None  # set by wake_listener: start a conversation without the wake word (boot key); returns False until the mic is up
 
 _state = {"phase": "closed", "speaking": False, "updated": 0.0}
 _state_lock = threading.Lock()
@@ -166,12 +174,41 @@ def _say(text: str) -> None:
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _ask(self) -> None:
+        """Stream a typed answer as server-sent events."""
+        if "application/json" not in (self.headers.get("Content-Type") or ""):
+            self._send(415, b"json only", "text/plain")  # (a plain HTML form can't send JSON)
+            return
+        body = self._body()
+        if ask_handler is None:
+            self._json({"error": "JARVIS isn't ready yet"}, 503)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+        def emit(event: dict) -> None:
+            try:
+                self.wfile.write(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # the window was closed mid-answer
+
+        try:
+            ask_handler(str(body.get("text", "")), emit, bool(body.get("speak")))
+        except Exception as exc:  # noqa: BLE001
+            log(f"ask failed: {exc!r}")
+            emit({"type": "done", "text": "Sorry, something went wrong.", "source": "error"})
+
     def log_message(self, *_args: object) -> None:
         pass  # quiet; errors are logged explicitly
 
     def _allowed(self) -> bool:
-        # Blocks DNS-rebinding pages from reaching this loopback server.
-        if self.headers.get("Host") in ALLOWED_HOSTS:
+        # Host: blocks DNS-rebinding pages. Origin: blocks other web pages
+        # from making JARVIS do things (open apps, speak, ...).
+        origin = self.headers.get("Origin")
+        if self.headers.get("Host") in ALLOWED_HOSTS and (origin is None or origin in ALLOWED_ORIGINS):
             return True
         self._send(403, b"forbidden", "text/plain")
         return False
@@ -198,7 +235,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self._allowed():
             return
         path = self.path.split("?", 1)[0]
-        if path in ("/", "/index.html"):
+        if path == "/chat":
+            self._send(200, (SCREEN_DIR / "chat.html").read_bytes(), "text/html; charset=utf-8")
+        elif path in ("/", "/index.html"):
             self._send(200, (SCREEN_DIR / "index.html").read_bytes(), "text/html; charset=utf-8")
         elif path == "/findings":
             data = current_findings()
@@ -211,6 +250,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         if not self._allowed():
+            return
+        if self.path == "/ask":
+            self._ask()
             return
         if self.path == "/tts":
             text = str(self._body().get("text", "")).strip()[:1200]
@@ -233,6 +275,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 smarts.mark_done(rid)
             self._json({"ok": True})
+        elif self.path == "/listen":
+            self._json({"ok": bool(listen_handler and listen_handler())})
         elif self.path == "/say":
             text = str(self._body().get("text", "")).strip()[:400]
             if text:

@@ -229,6 +229,7 @@ function postToPet(urlPath, body) {
   });
 }
 ipcMain.handle('pa:open-goals', () => postToPet('/goals'));
+ipcMain.handle('pa:open-chat', () => postToPet('/chat'));
 
 ipcMain.handle('pa:open-screen', (_e, autostart) => new Promise((resolve) => {
   const req = require('node:http').request(

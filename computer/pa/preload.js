@@ -15,4 +15,5 @@ contextBridge.exposeInMainWorld('pa', {
   openLogs: () => ipcRenderer.invoke('pa:open-logs'),
   openScreen: (autostart) => ipcRenderer.invoke('pa:open-screen', autostart),
   openGoals: () => ipcRenderer.invoke('pa:open-goals'),
+  openChat: () => ipcRenderer.invoke('pa:open-chat'),
 });

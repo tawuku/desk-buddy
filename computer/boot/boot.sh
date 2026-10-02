@@ -41,4 +41,10 @@ done
 if [ "$(cat "$(dirname "$0")/../../config/mode" 2>/dev/null)" != "pet" ]; then
   echo "[boot] starting JARVIS"
   start com.jarvis.voice-wake
+  # No wake word needed after the boot key: once JARVIS is up it starts
+  # listening on its own (the intro has greeted).
+  for _ in $(seq 1 240); do
+    curl -s -m 2 -X POST http://127.0.0.1:8094/listen 2>/dev/null | grep -q '"ok": *true' && { echo "[boot] listening"; break; }
+    sleep 1
+  done
 fi

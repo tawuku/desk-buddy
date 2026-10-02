@@ -12,10 +12,11 @@ fully local voice assistant behind it. No cloud, no account, no subscription.
 | Desktop pet (5 characters, walks around, reacts to what you're doing) | ✓ | ✓ |
 | Goals, water breaks, mood check-ins, "call Mom" nudges, CPU alerts | ✓ | ✓ |
 | Apple Health from your iPhone (via a Shortcut) | ✓ | ✓ |
-| "Hey Jarvis" voice assistant, running 100% on your Mac | | ✓ |
+| "Wake up Jarvis" voice assistant, running 100% on your Mac | | ✓ |
 | Full-screen daily briefing on every display | | ✓ |
 | Reminders & timers, memory, Apple Notes, documents, web previews by voice | | ✓ |
 | Music, volume, directions, screenshots, battery... by voice | | ✓ |
+| Chat window: type to JARVIS instead of talking (⌘⇧J) | | ✓ |
 | Hold Space for 3 s: wake-up intro on every display | ✓ | ✓ |
 | Needs | macOS + Node.js | + Homebrew, ~2 GB disk |
 
@@ -58,7 +59,7 @@ See [computer/health/README.md](computer/health/README.md).
 
 ## JARVIS
 
-Say **"hey Jarvis"**, then talk. Everything runs locally: wake word
+Say **"wake up Jarvis"**, then talk. Everything runs locally: wake word
 (openWakeWord), speech recognition (whisper.cpp), a small language model
 (Qwen3 1.7B on llama.cpp) and a natural voice (Piper).
 
@@ -82,8 +83,10 @@ Say **"hey Jarvis"**, then talk. Everything runs locally: wake word
   numbers (sign-ups, orders, revenue, approvals waiting), with pet cards when
   something happens. See [computer/business/README.md](computer/business/README.md).
 - "Thanks" / "that's all" / "go to sleep" ends the conversation.
+- Rather type? **⌘⇧J** opens a chat window anywhere: answers stream in, and
+  everyday things (time, weather, reminders, music) come back instantly.
 
-JARVIS starts with your Mac and listens for "hey Jarvis" -- the **first
+JARVIS starts with your Mac and listens for "wake up Jarvis" -- the **first
 wake after a restart plays the boot intro** (or hold **Space for 3 seconds**
 any time). While plugged in it keeps your Mac from idle-sleeping so it can
 still hear you (the display turns off as usual; set `"keep_awake"` in

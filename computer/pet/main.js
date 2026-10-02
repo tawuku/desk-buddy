@@ -72,6 +72,7 @@ const UNDONE_NUDGE_AWAKE_MS = 2 * 60 * 60 * 1000; // 2h of awake time
 let win = null;
 let panelWin = null;
 let screenWins = [];
+let chatWin = null;
 let bootWins = [];
 let bootTimer = null;
 let screenMode = 'full';
@@ -354,7 +355,7 @@ function setVoiceWakeEnabled(enabled) {
   const cmd = enabled ? `launchctl load -w "${plist}"` : `launchctl unload -w "${plist}"`;
   exec(cmd, (err) => {
     if (err && !enabled) return; // already unloaded -- fine
-    notify('JARVIS', enabled ? 'Voice wake is on -- say "hey Jarvis"' : 'Voice wake is off');
+    notify('JARVIS', enabled ? 'Voice wake is on -- say "wake up Jarvis"' : 'Voice wake is off');
     refreshTrayMenu();
   });
 }
@@ -536,6 +537,42 @@ ipcMain.on('panel-resize', (_e, height) => {
 ipcMain.on('panel-dismiss', () => {
   if (panelWin && !panelWin.isDestroyed()) panelWin.destroy();
 });
+
+// --- Chat: type to JARVIS (computer/screen/chat.html, served by JARVIS on
+// 8094 -- POST /ask streams the answer). ⌘⇧J toggles it from anywhere.
+const CHAT_SHORTCUT = 'CommandOrControl+Shift+J';
+
+function toggleChat() {
+  if (chatWin && !chatWin.isDestroyed() && chatWin.isVisible() && chatWin.isFocused()) {
+    chatWin.hide();
+    return;
+  }
+  if (!chatWin || chatWin.isDestroyed()) {
+    const { workArea } = screen.getPrimaryDisplay();
+    chatWin = new BrowserWindow({
+      width: 440, height: 640, minWidth: 360, minHeight: 420,
+      x: workArea.x + workArea.width - 460, y: workArea.y + workArea.height - 660,
+      title: 'Chat with JARVIS', titleBarStyle: 'hiddenInset', backgroundColor: '#05080e', show: false,
+      webPreferences: { preload: path.join(__dirname, 'chat-preload.js'), contextIsolation: true, nodeIntegration: false },
+    });
+    chatWin.webContents.on('did-fail-load', () => {
+      chatWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(
+        '<body style="background:#05080e;color:#cfe6ff;font:15px -apple-system;display:grid;place-items:center;height:90vh;text-align:center">'
+        + '<div><b>JARVIS isn\'t running</b><br><br>Switch it on in PA, then press ⌘⇧J again.</div></body>'));
+    });
+    chatWin.on('close', (e) => { if (!app.isQuitting) { e.preventDefault(); chatWin.hide(); } });
+    chatWin.loadURL(`${SCREEN_URL}chat`);
+    chatWin.once('ready-to-show', () => { app.focus({ steal: true }); chatWin.show(); chatWin.webContents.send('chat-shown'); });
+    return;
+  }
+  if (chatWin.webContents.getURL().startsWith('data:')) chatWin.loadURL(`${SCREEN_URL}chat`); // JARVIS may be up now
+  app.focus({ steal: true });
+  chatWin.show();
+  chatWin.focus();
+  chatWin.webContents.send('chat-shown');
+}
+
+ipcMain.on('chat-hide', () => { if (chatWin && !chatWin.isDestroyed()) chatWin.hide(); });
 
 function closeScreens() {
   const old = screenWins;
@@ -767,6 +804,12 @@ function startPanelServer() {
       res.end('ok');
       return;
     }
+    if (req.method === 'POST' && req.url === '/chat') {
+      toggleChat();
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('ok');
+      return;
+    }
     if (req.method === 'POST' && req.url === '/notify/card') {
       readJsonBody(req).then((card) => {
         const shown = card && card.title ? reminders.showInfo(card) : false;
@@ -886,6 +929,7 @@ function refreshTrayMenu() {
       { label: 'Test a reminder', click: () => reminders.demo() },
       { type: 'separator' },
       ...(FULL_JARVIS ? [
+      { label: 'Chat with JARVIS   ⌘⇧J', click: toggleChat },
       { label: 'Show JARVIS panel', click: showPanel },
       { label: 'Open JARVIS screen', click: () => showScreens() },
       { label: 'Brief me on all screens', click: () => showScreens({ autostart: true }) },
@@ -893,7 +937,7 @@ function refreshTrayMenu() {
       { label: 'Close JARVIS screen   ⌘⇧⎋', click: closeScreens },
       { label: 'Play boot intro', click: showBoot },
       {
-        label: 'Voice wake ("hey Jarvis")',
+        label: 'Voice wake ("wake up Jarvis")',
         type: 'checkbox',
         checked: voiceWakeOn,
         click: (item) => setVoiceWakeEnabled(item.checked),
@@ -958,6 +1002,7 @@ app.whenReady().then(() => {
   createWindow();
   buildTray();
   startPanelServer();
+  if (FULL_JARVIS) globalShortcut.register(CHAT_SHORTCUT, toggleChat);
   goalsWindow.setCharacterListener((c) => { sendToPet('pet-character', c); refreshTrayMenu(); });
   reminders.init({
     petWindow: () => win,
@@ -980,6 +1025,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('before-quit', () => { app.isQuitting = true; });
 
 app.on('before-quit', () => {
   clearInterval(appPollTimer);

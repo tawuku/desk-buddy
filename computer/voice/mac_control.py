@@ -246,7 +246,9 @@ def mac(text: str) -> str | None:
         if left and ":" in left and left != "0:00":
             h, mi = left.split(":")
             extra = f", about {int(h)} hours {int(mi)} minutes {'left' if 'discharging' in state else 'until full'}"
-        return f"Battery at {pct} percent, {'charging' if state in ('charging', 'finishing charge') else 'on battery' if 'discharging' in state else state}{extra}."
+        status = ("charging" if state in ("charging", "finishing charge") else "on battery" if "discharging" in state
+                  else "fully charged" if state == "charged" else "plugged in but not charging")
+        return f"Battery at {pct} percent, {status}{extra}."
     m = _DARK.search(text)
     if m and re.search(r"\b(turn|switch|enable|disable|set|on|off|use)\b", text, re.I):
         dark = m.group(1).lower() == "dark"

@@ -94,7 +94,7 @@ function applyStatus(status) {
   const jarvisUpCount = JARVIS_KEYS.filter((k) => status[k]).length;
   jarvisToggle.checked = jarvisUpCount === JARVIS_KEYS.length;
   jarvisToggle.indeterminate = jarvisUpCount > 0 && jarvisUpCount < JARVIS_KEYS.length;
-  jarvisSub.textContent = jarvisUpCount ? 'Running -- say "hey Jarvis"' : 'Off';
+  jarvisSub.textContent = jarvisUpCount ? 'Running -- say "wake up Jarvis"' : 'Off';
 
   petToggle.checked = !!status.pet;
 }
@@ -207,6 +207,10 @@ threadsApplyBtn.addEventListener('click', async () => {
 // --- advanced --------------------------------------------------
 
 document.getElementById('open-logs').addEventListener('click', () => window.pa.openLogs());
+document.getElementById('open-chat').addEventListener('click', async () => {
+  const { ok } = await window.pa.openChat();
+  if (!ok) toast('Turn on the desktop pet first -- it opens the chat (⌘⇧J).');
+});
 document.getElementById('open-goals').addEventListener('click', async () => {
   const { ok } = await window.pa.openGoals();
   if (!ok) toast('Turn on the desktop pet first -- it keeps your goals and reminders.');

@@ -1,7 +1,7 @@
 #!/bin/bash
 # desk-buddy installer (macOS)
 #
-#   ./install.sh             JARVIS + Pet: the local voice assistant ("hey Jarvis"),
+#   ./install.sh             JARVIS + Pet: the local voice assistant ("wake up Jarvis"),
 #                            its full-screen briefing, and the desktop pet
 #   ./install.sh --pet-only  Just the desktop pet: goals, reminders, pop-ups
 #
@@ -81,7 +81,7 @@ ELECTRON="$ROOT/computer/pet/node_modules/electron/dist/Electron.app/Contents/Ma
 [ -x "$ELECTRON" ] || die "Electron didn't install -- see the npm output above."
 echo "$MODE" > "$ROOT/config/mode"
 # Both modes: the pet starts with your Mac (with JARVIS, so does JARVIS --
-# it listens for "hey Jarvis" from login; the first wake after a restart
+# it listens for "wake up Jarvis" from login; the first wake after a restart
 # plays the boot intro). Switch either off in PA.
 PET_ATLOAD=true
 write_agent com.jarvis.pet "$PET_ATLOAD" false "$ROOT/computer/pet" "$ELECTRON" "$ROOT/computer/pet"
@@ -141,6 +141,9 @@ download "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B
 download "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin" "$ROOT/models/ggml-base.en.bin"
 download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/en_GB-alan-medium.onnx" "$ROOT/models/piper/en_GB-alan-medium.onnx"
 download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/en_GB-alan-medium.onnx.json" "$ROOT/models/piper/en_GB-alan-medium.onnx.json"
+N=en_GB-northern_english_male-medium
+download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/northern_english_male/medium/$N.onnx" "$ROOT/models/piper/$N.onnx"
+download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/northern_english_male/medium/$N.onnx.json" "$ROOT/models/piper/$N.onnx.json"
 
 # --- 3. your config ---------------------------------------------------------------
 say "Your settings"
@@ -209,10 +212,10 @@ ok "PA control app in ~/Applications"
 
 say "Done!"
 cat <<'EOF'
-    • JARVIS starts with your Mac and listens for "hey Jarvis" (the first wake
+    • JARVIS starts with your Mac and listens for "wake up Jarvis" (the first wake
       after a restart plays the boot intro). Stop/start it in PA
       (Spotlight: "PA"). First start loads the model (~30 s).
-    • Then say "hey Jarvis". Try: "give me an update", "remind me in 10 minutes
+    • Then say "wake up Jarvis". Try: "give me an update", "remind me in 10 minutes
       to stretch", "remember that ...", "open my CV", "how did I sleep?"
     • macOS will ask once for the microphone, and later for Notes / Mail /
       Music when you first use those.
