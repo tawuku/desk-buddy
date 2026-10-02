@@ -52,6 +52,7 @@ import findings
 import mac_control
 import quick
 import screen_server
+import remote
 import skills
 import smarts
 import tts
@@ -613,6 +614,9 @@ def start_whisper_server() -> None:
     """Start the resident whisper-server as a child of this process (unless
     one is already answering on the port, e.g. left from a previous run)."""
     global _whisper_server
+    if remote.enabled():
+        log("speech recognition runs on the remote brain")
+        return
     server_bin = WHISPER_NATIVE_BIN / "whisper-server"
     if not server_bin.exists():
         log("native whisper-server not built; using whisper-cli per call")
@@ -643,6 +647,9 @@ def start_llama_server() -> None:
     """Start the local model server as a child (unless one already answers
     on the port). mlock keeps macOS from compressing the model's memory --
     that was a 20x slowdown before."""
+    if remote.enabled():
+        log("the language model runs on the remote brain")
+        return
     try:
         urllib.request.urlopen(f"http://127.0.0.1:{LLAMA_PORT}/health", timeout=1)
         log("model server already running, reusing it")
@@ -691,9 +698,9 @@ def _transcribe_server(wav_path: Path, prompt: str) -> str:
     )
     parts.append(f"--{boundary}--\r\n".encode())
     req = urllib.request.Request(
-        WHISPER_SERVER_URL,
+        remote.url("/stt") if remote.enabled() else WHISPER_SERVER_URL,
         data=b"".join(parts),
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}", **remote.headers()},
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
@@ -1311,7 +1318,10 @@ def warm_model() -> None:
     real question only has to read its own few tokens."""
     for _ in range(120):
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{LLAMA_PORT}/health", timeout=2)
+            if remote.enabled():
+                urllib.request.urlopen(urllib.request.Request(remote.url("/health"), headers=remote.headers()), timeout=2)
+            else:
+                urllib.request.urlopen(f"http://127.0.0.1:{LLAMA_PORT}/health", timeout=2)
             break
         except Exception:  # noqa: BLE001 -- still loading
             time.sleep(3)

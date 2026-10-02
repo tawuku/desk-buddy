@@ -66,3 +66,7 @@ computer/pa/node_modules/
 # Local tooling
 .claude/
 *.tmp
+
+# Remote brain (Windows PC): host/token for the Mac, token for the PC
+config/remote.json
+config/server.json

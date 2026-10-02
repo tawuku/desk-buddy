@@ -23,10 +23,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
+import remote
+
 JARVIS_DIR = Path(__file__).resolve().parent.parent.parent
 SOURCES_FILE = JARVIS_DIR / "config" / "jarvis_sources.json"
 LOCAL_MODEL_ENV_FILE = JARVIS_DIR / "config" / ".env.local_model"
-LLAMA_CHAT_URL = "http://127.0.0.1:8080/v1/chat/completions"
+LLAMA_CHAT_URL = "http://127.0.0.1:8080/v1/chat/completions"  # remote brain: see remote.py
 CACHE_DIR = Path(__file__).resolve().parent / "cache"
 BRIEFING_FILE = CACHE_DIR / "briefing.json"
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) JARVIS/1.0"
@@ -60,6 +62,16 @@ def _strip_tags(s: str) -> str:
 
 # --- LLM -----------------------------------------------------------------
 
+def _chat_url() -> str:
+    return remote.url("/llm/v1/chat/completions") if remote.enabled() else LLAMA_CHAT_URL
+
+
+def _auth_headers() -> dict:
+    if remote.enabled():
+        return remote.headers()
+    return {"Authorization": f"Bearer {_api_key()}"}
+
+
 def _api_key() -> str:
     for line in LOCAL_MODEL_ENV_FILE.read_text().splitlines():
         if line.startswith("LLAMA_SERVER_API_KEY="):
@@ -79,9 +91,9 @@ def llm_chat(messages: list[dict], max_tokens: int = 120, timeout: float = 300) 
         "chat_template_kwargs": {"enable_thinking": False},
     }).encode("utf-8")
     req = urllib.request.Request(
-        LLAMA_CHAT_URL,
+        _chat_url(),
         data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {_api_key()}"},
+        headers={"Content-Type": "application/json", **_auth_headers()},
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -107,9 +119,9 @@ def llm_stream(messages: list[dict], max_tokens: int = 120, timeout: float = 300
         "chat_template_kwargs": {"enable_thinking": False},
     }).encode("utf-8")
     req = urllib.request.Request(
-        LLAMA_CHAT_URL,
+        _chat_url(),
         data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {_api_key()}"},
+        headers={"Content-Type": "application/json", **_auth_headers()},
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:

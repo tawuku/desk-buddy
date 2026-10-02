@@ -63,6 +63,8 @@ Say **"wake up Jarvis"**, then talk. Everything runs locally: wake word
 (openWakeWord), speech recognition (whisper.cpp), a small language model
 (Qwen3 1.7B on llama.cpp) and a natural voice (Piper).
 
+**Run it on a Windows PC instead:** the model, speech recognition and voice can live on a stronger/always-on PC while the Mac only listens and plays audio -- see [computer/server/](computer/server/README.md).
+
 - "Give me an update" -- a full-screen briefing on all your screens:
   priorities, goals, health, notes, weather, inbox, projects, news.
 

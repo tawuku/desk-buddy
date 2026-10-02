@@ -22,6 +22,7 @@ import activity
 import business as business_data
 import health as health_data
 import notes as notes_data
+import remote
 import skills
 
 FINDINGS_FILE = skills.CACHE_DIR / "findings.json"
@@ -290,6 +291,12 @@ def world(src: dict) -> dict:
 
 
 def _port_up(port: int, path: str = "/") -> bool:
+    if remote.enabled() and port in (8080, 8093):  # model + speech live on the remote brain
+        try:
+            req = urllib.request.Request(remote.url("/health"), headers=remote.headers())
+            return bool(json.loads(urllib.request.urlopen(req, timeout=2).read()).get("llm" if port == 8080 else "stt"))
+        except Exception:  # noqa: BLE001
+            return False
     try:
         urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=1.5)
         return True

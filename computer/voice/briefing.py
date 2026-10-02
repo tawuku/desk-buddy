@@ -17,6 +17,7 @@ import sys
 import urllib.request
 from datetime import datetime
 
+import remote
 import skills
 
 
@@ -32,7 +33,10 @@ def main() -> int:
         log("today's briefing already prepared, nothing to do")
         return 0
     try:
-        urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=3)
+        if remote.enabled():
+            urllib.request.urlopen(urllib.request.Request(remote.url("/health"), headers=remote.headers()), timeout=3)
+        else:
+            urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=3)
     except Exception:  # noqa: BLE001
         log("model server isn't running -- turn JARVIS on in PA first")
         return 1

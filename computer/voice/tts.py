@@ -22,8 +22,11 @@ import subprocess
 import sys
 import tempfile
 import threading
+import urllib.request
 import wave
 from pathlib import Path
+
+import remote
 
 JARVIS_DIR = Path(__file__).resolve().parent.parent.parent
 PIPER_DIR = JARVIS_DIR / "models" / "piper"
@@ -52,6 +55,8 @@ def save_config(voice: str | None = None, speed: float | None = None) -> dict:
 
 
 def available_voices() -> list[str]:
+    if remote.enabled() and not PIPER_DIR.exists():
+        return [load_config()["voice"]]
     return sorted(p.stem for p in PIPER_DIR.glob("*.onnx") if p.with_suffix(".onnx.json").exists())
 
 
@@ -67,9 +72,16 @@ def _voice(name: str):  # noqa: ANN202
 def synthesize(text: str, voice: str | None = None, speed: float | None = None) -> bytes:
     """WAV bytes for text. speed > 1 talks faster (Piper's length_scale is
     the inverse: duration multiplier)."""
+    cfg = load_config()
+    if remote.enabled():  # the heavy lifting happens on the remote brain
+        req = urllib.request.Request(
+            remote.url("/tts"), method="POST",
+            data=json.dumps({"text": text, "voice": voice, "speed": speed or cfg.get("speed")}).encode(),
+            headers={"Content-Type": "application/json", **remote.headers()})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.read()
     from piper.config import SynthesisConfig
 
-    cfg = load_config()
     name = voice or cfg["voice"]
     if name not in available_voices():
         name = DEFAULT_CONFIG["voice"]
