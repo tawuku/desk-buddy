@@ -27,14 +27,23 @@ Set the PC's sleep to "Never" while plugged in.
 
 ## 2. On the Mac
 ```bash
+./install.sh --remote                          # thin client: no engines or models downloaded here
 bash computer/server/connect.sh <pc-ip> <token>
 bash computer/server/connect.sh services llm   # slow PC? only the language model runs there;
                                                # speech recognition + voice stay on the Mac
 bash computer/server/connect.sh status      # is it reachable?
 bash computer/server/connect.sh off         # back to everything on the Mac
 ```
-The Mac then stops running the model and Whisper locally. If the PC is off,
-JARVIS can't answer -- run `connect.sh off` to go back to local mode.
+The Mac then stops running the model and Whisper locally, and **PA** shows a
+Brain card: is the PC answering, and which parts run there. If the PC is off,
+JARVIS can't answer -- run `connect.sh off` to go back to local mode (on a
+thin client, first `./install.sh --local` to download the models; `connect.sh`
+refuses to move a part back to a Mac that has no files for it).
+
+Already installed the full local setup and want the disk space back? Once
+`connect.sh status` shows everything on the PC, the Mac no longer needs
+`models/` or `engines/` -- delete them. `./install.sh` won't download them
+again while the Mac is connected.
 
 ## Away from home (Tailscale)
 Install [Tailscale](https://tailscale.com) on both the PC and the Mac and sign

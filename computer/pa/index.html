@@ -134,6 +134,11 @@
   }
   .dot.up { background: var(--green); box-shadow: 0 0 6px var(--green); }
   .dot.down { background: #4a4a52; }
+  .dot.bad { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .service-where { font-size: 11px; color: var(--ink-dim); }
+  .master-actions { display: flex; align-items: center; gap: 10px; }
+  .master-sub.warn { color: #ffb454; }
+  [hidden] { display: none !important; }
   .service-name {
     flex: 1;
     font-size: 12.5px;
@@ -235,10 +240,13 @@
           <div class="master-label">JARVIS</div>
           <div class="master-sub" id="jarvis-sub">Off</div>
         </div>
-        <label class="switch" id="jarvis-switch">
-          <input type="checkbox" id="jarvis-toggle" />
-          <span class="track"><span class="thumb"></span></span>
-        </label>
+        <div class="master-actions">
+          <button class="mini-btn" id="jarvis-restart">Restart</button>
+          <label class="switch" id="jarvis-switch">
+            <input type="checkbox" id="jarvis-toggle" />
+            <span class="track"><span class="thumb"></span></span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -246,7 +254,7 @@
       <div class="master-row">
         <div>
           <div class="master-label">Desktop pet (HUD)</div>
-          <div class="master-sub">Tray icon + wake panel</div>
+          <div class="master-sub">Goals, reminders, the briefing screen</div>
         </div>
         <label class="switch" id="pet-switch">
           <input type="checkbox" id="pet-toggle" />
@@ -255,9 +263,31 @@
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Services</div>
-      <div class="service-list" id="service-list"></div>
+    <div class="card" id="brain-card" hidden>
+      <div class="card-title">Brain</div>
+      <div class="service-list">
+        <div class="service-row">
+          <span class="dot" id="brain-dot"></span>
+          <span class="service-name" id="brain-line">Checking...</span>
+          <button class="mini-btn" id="brain-check">Check</button>
+        </div>
+        <div class="service-row">
+          <span class="dot" id="brain-dot-llm"></span>
+          <span class="service-name">Thinking</span>
+          <span class="service-where" id="brain-where-llm"></span>
+        </div>
+        <div class="service-row">
+          <span class="dot" id="brain-dot-stt"></span>
+          <span class="service-name">Hearing</span>
+          <span class="service-where" id="brain-where-stt"></span>
+        </div>
+        <div class="service-row">
+          <span class="dot" id="brain-dot-tts"></span>
+          <span class="service-name">Voice</span>
+          <span class="service-where" id="brain-where-tts"></span>
+        </div>
+      </div>
+      <div class="hint" id="brain-hint"></div>
     </div>
 
     <div class="card">
@@ -276,7 +306,7 @@
       <div class="hint" id="voice-hint">Reading current voice settings...</div>
     </div>
 
-    <div class="card">
+    <div class="card" id="threads-card" hidden>
       <div class="card-title">Performance</div>
       <label class="field-label">Model CPU threads</label>
       <input type="number" id="threads-input" min="1" max="16" />

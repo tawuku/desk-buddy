@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, screen, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const { exec, execFile } = require('node:child_process');
+const brain = require('../pet/brain');
 
 const JARVIS_ROOT = path.join(__dirname, '..', '..');
 const LAUNCH_AGENTS_DIR = path.join(os.homedir(), 'Library', 'LaunchAgents');
@@ -11,9 +12,10 @@ const ENV_FILE = path.join(JARVIS_ROOT, 'config', '.env.local_model');
 const VOICE_PY = path.join(JARVIS_ROOT, 'computer', 'voice', 'venv', 'bin', 'python3');
 const TTS_PY = path.join(JARVIS_ROOT, 'computer', 'voice', 'tts.py');
 
-// JARVIS Lite: one app (computer/voice/wake_listener.py) runs everything --
-// wake word, speech recognition, the local model and the Piper voice -- as
-// the com.jarvis.voice-wake LaunchAgent. The pet (HUD panel) is separate.
+// One app (computer/voice/wake_listener.py) is JARVIS -- the com.jarvis.voice-wake
+// LaunchAgent. It runs the wake word, speech recognition, the model and the
+// Piper voice itself, or hands the heavy ones to a remote brain
+// (config/remote.json -- see ../pet/brain.js). The pet (HUD panel) is separate.
 const SERVICES = {
   voiceWake: { label: 'com.jarvis.voice-wake', name: 'JARVIS' },
   pet: { label: 'com.jarvis.pet', name: 'Desktop pet (HUD)' },
@@ -113,7 +115,7 @@ async function getStatus() {
 
 // --- voice (Piper, via computer/voice/tts.py) ---------------------------
 // tts.py owns config/voice.json and knows which voices are installed
-// (models/piper/*.onnx); PA just calls it. Changes apply to JARVIS's next
+// (models/piper/*.onnx here, or the remote brain's); PA just calls it. Changes apply to JARVIS's next
 // sentence -- no restart.
 
 function runTts(args, timeoutMs = 30000) {
@@ -148,7 +150,7 @@ async function previewVoice({ voice, speed }) {
   return err ? { ok: false, error: (stderr || err.message).slice(0, 200) } : { ok: true };
 }
 
-// --- performance: llama.cpp thread count --------------------------------
+// --- performance: llama.cpp thread count (only when the model runs here) --
 
 function readThreadCount() {
   try {
@@ -162,7 +164,8 @@ function readThreadCount() {
 
 function writeThreadCount(n) {
   const text = fs.readFileSync(ENV_FILE, 'utf8');
-  const next = text.replace(/^JARVIS_MODEL_THREADS=\d+/m, `JARVIS_MODEL_THREADS=${n}`);
+  const line = `JARVIS_MODEL_THREADS=${n}`;
+  const next = /^JARVIS_MODEL_THREADS=\d+/m.test(text) ? text.replace(/^JARVIS_MODEL_THREADS=\d+/m, line) : `${text.trimEnd()}\n${line}\n`;
   fs.writeFileSync(ENV_FILE, next);
 }
 
@@ -173,7 +176,8 @@ let win = null;
 function createWindow() {
   win = new BrowserWindow({
     width: 420,
-    height: 680,
+    height: Math.min(790, screen.getPrimaryDisplay().workAreaSize.height - 40), // fits every card; scrolls on a small screen
+    useContentSize: true,
     resizable: false,
     title: 'PA',
     backgroundColor: '#0b0e11',
@@ -211,9 +215,16 @@ ipcMain.handle('pa:preview-voice', (_e, opts) => previewVoice(opts));
 
 ipcMain.handle('pa:get-threads', () => ({ threads: readThreadCount(), cpuCount: os.cpus().length }));
 ipcMain.handle('pa:set-threads', (_e, n) => {
-  writeThreadCount(n);
-  return { ok: true };
+  try {
+    writeThreadCount(n);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
+
+// Where the brain runs (and whether it answers) -- never includes the token.
+ipcMain.handle('pa:get-brain', () => brain.status());
 
 // The pet app shows the JARVIS screen on every display (computer/pet/main.js,
 // POST /screen on its loopback port 8092).

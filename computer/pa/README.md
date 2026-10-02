@@ -1,82 +1,47 @@
 # PA -- the JARVIS control app
 
-Nothing in JARVIS auto-starts at login anymore (see Build 008 in the root
-`DEVELOPMENT_LOG.md`). PA is how you turn it on, turn it off, and change
-settings -- a small Electron app with a window, not a background service
-itself.
+A small Electron window for turning JARVIS and the pet on and off and changing
+a few settings. It is not a background service: closing it stops nothing.
 
 ## Opening it
 
-It's installed at `~/Applications/PA.app` -- Spotlight-searchable ("PA"),
-double-clickable, no Terminal needed. Closing its window doesn't stop
-anything it started; JARVIS keeps running until you tell PA to stop it.
+`./install.sh` puts it at `~/Applications/PA.app` -- Spotlight-searchable
+("PA"), double-clickable, no Terminal needed.
 
-## What it controls
+## What it shows
 
-- **JARVIS** (one switch): the Gateway, model server, TTS server, and
-  voice wake together -- everything except the desktop pet.
-- **Desktop pet (HUD)** (its own switch): separate from JARVIS on purpose,
-  same as the original request -- you might want the model running without
-  the on-screen pet, or vice versa.
-- **Services** list: the same four JARVIS services individually, each with
-  its own Start/Stop and Restart, live status dot (green = running).
-  Useful when only one thing needs a kick instead of the whole stack.
-- **Voice**: speaker, language, and speed, pulled live from the TTS
-  server's own `/speakers` and `/languages` endpoints when it's running
-  (falls back to just showing the currently-saved values if it's off).
-  "Apply" writes `computer/tts/config.yaml`'s `voice:` block and restarts
-  the TTS server so the new default takes effect immediately.
-- **Performance**: the model server's CPU thread count
-  (`config/.env.local_model`'s `JARVIS_MODEL_THREADS`). This is the knob
-  that caused real reliability problems when set too high (see Build 007
-  in `DEVELOPMENT_LOG.md`) -- PA shows how many CPU threads the machine
-  has as a reference point. Takes effect on the model server's next
-  restart, not live.
-- **Advanced**: opens OpenClaw's own web Control UI (same as the pet's
-  tray menu), and opens the `logs/` folder in Finder.
+- **JARVIS** -- one switch (and a Restart button) for the voice app
+  (`computer/voice/wake_listener.py`, the `com.jarvis.voice-wake` LaunchAgent).
+- **Desktop pet (HUD)** -- its own switch (`com.jarvis.pet`).
+- **Brain** -- only when this Mac is connected to a brain server
+  (`config/remote.json`, see `computer/server/`): whether the other computer
+  answers, how fast, and where each part runs -- Thinking (the language
+  model), Hearing (speech recognition), Voice. Red means that part isn't
+  running over there.
+- **Voice** -- the Piper voice and speed (`config/voice.json`). The list is the
+  voices in `models/piper/`, or the brain server's when the voice runs there.
+  Applies to JARVIS's next sentence, no restart.
+- **Performance** -- only when the language model runs on this Mac: its CPU
+  thread count (`JARVIS_MODEL_THREADS` in `config/.env.local_model`), applied
+  the next time JARVIS starts.
+- **Advanced** -- Chat with JARVIS, Goals & reminders, Brief me on all screens
+  (all three are windows of the pet app, so the pet must be on), Open logs.
 
-## How service control actually works
+## How service control works
 
-Every LaunchAgent plist (`~/Library/LaunchAgents/com.jarvis.*.plist`) has
-`RunAtLoad` set to `false` -- login does nothing on its own. PA starts a
-service with `launchctl bootstrap` (loads the job definition, dormant)
-followed by `launchctl kickstart -k` (actually runs it), and stops one
-with `launchctl bootout` (fully unloads it, which is what actually
-prevents `KeepAlive: true` services -- gateway, model server, TTS server,
-voice wake all have it -- from immediately relaunching themselves; a plain
-`stop`/`kill` would not survive that). This mirrors the same commands the
-pet's own tray menu and the various READMEs already documented for manual
-use; PA is just a GUI over the same operations, run automatically instead
-of typed by hand.
-
-## Why the plist-parsing in `main.js` looks unusual
-
-`launchctl list <exact-label>` (one specific job) prints a different,
-older dict-style format than bare `launchctl list` (the full table) --
-`"PID" = 1234;` only appears while the job is actually running, absent
-while loaded-but-stopped. `main.js`'s `isRunning()` was originally written
-against the wrong format (copied from a mental model of the table output)
-and gave false readings until this was caught and fixed by testing against
-the real command output, not assumed from memory -- see the code comment
-there if this ever needs touching again.
-
-## Reusing Electron instead of a second install
-
-`~/Applications/PA.app/Contents/MacOS/PA` is a small shell script that
-execs the *pet's* already-downloaded Electron binary
-(`computer/pet/node_modules/electron/...`) pointed at `computer/pa/`
-instead of `computer/pet/`. No separate `npm install` for PA, no second
-~200MB Electron download. If you ever move the whole `JARVIS/` repo, both
-that script's hardcoded path and the pet's LaunchAgent plists break the
-same way -- ask JARVIS to regenerate them.
+"Off" has to survive a restart, so PA stops a service with `launchctl disable`
++ `launchctl bootout` and starts it with `launchctl enable` + `bootstrap` +
+`kickstart -k`. Running/stopped comes from `launchctl list <label>`, which
+prints a `"PID" = 1234;` line only while the job is actually running.
 
 ## Files
 
-- `main.js` -- Electron main process: all launchctl control, voice-config
-  read/write, thread-count read/write, IPC handlers.
-- `preload.js` -- `contextBridge` API (`window.pa.*`), `contextIsolation`
-  on, `nodeIntegration` off, same pattern as the pet app.
-- `index.html` / `renderer.js` -- the UI: toggles, service list, voice
-  dropdowns, thread input, status polling every 4s.
-- `package.json` -- present for `npm start` during development; the real
-  `.app` launcher doesn't use it (see above).
+- `main.js` -- Electron main process: launchctl control, voice config,
+  thread count, brain status (`../pet/brain.js`), IPC handlers.
+- `preload.js` -- the `window.pa.*` bridge (`contextIsolation` on,
+  `nodeIntegration` off).
+- `index.html` / `renderer.js` -- the UI; status every 4 s, brain every 15 s.
+
+PA has no Electron of its own: `PA.app` is a small script that runs the pet's
+Electron binary (`computer/pet/node_modules/electron/...`) on `computer/pa/`.
+If you move the repo folder, run `./install.sh` again to fix the paths.

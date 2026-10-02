@@ -1,14 +1,9 @@
-const SERVICE_ROWS = [
-  { key: 'voiceWake', name: 'JARVIS (voice, model, speech)' },
-];
-const JARVIS_KEYS = SERVICE_ROWS.map((r) => r.key);
-
 const jarvisToggle = document.getElementById('jarvis-toggle');
 const jarvisSwitch = document.getElementById('jarvis-switch');
 const jarvisSub = document.getElementById('jarvis-sub');
 const petToggle = document.getElementById('pet-toggle');
 const petSwitch = document.getElementById('pet-switch');
-const serviceListEl = document.getElementById('service-list');
+const jarvisRestartBtn = document.getElementById('jarvis-restart');
 const toastEl = document.getElementById('toast');
 
 const voiceSpeakerEl = document.getElementById('voice-speaker');
@@ -30,72 +25,17 @@ function toast(msg) {
   toastTimer = setTimeout(() => toastEl.classList.remove('visible'), 3500);
 }
 
-// --- service rows --------------------------------------------------
+// --- status ----------------------------------------------------------
 
-const rowButtons = {};
-
-function buildServiceRows() {
-  serviceListEl.innerHTML = '';
-  for (const { key, name } of SERVICE_ROWS) {
-    const row = document.createElement('div');
-    row.className = 'service-row';
-
-    const dot = document.createElement('span');
-    dot.className = 'dot';
-    dot.id = `dot-${key}`;
-
-    const label = document.createElement('span');
-    label.className = 'service-name';
-    label.textContent = name;
-
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'mini-btn';
-    toggleBtn.id = `toggle-${key}`;
-
-    const restartBtn = document.createElement('button');
-    restartBtn.className = 'mini-btn';
-    restartBtn.textContent = 'Restart';
-    restartBtn.addEventListener('click', async () => {
-      restartBtn.disabled = true;
-      const res = await window.pa.restart(key);
-      restartBtn.disabled = false;
-      toast(res.ok ? `${name} restarted` : `${name}: ${res.error || 'failed'}`);
-      refreshStatus();
-    });
-
-    toggleBtn.addEventListener('click', async () => {
-      toggleBtn.disabled = true;
-      const running = toggleBtn.dataset.running === '1';
-      const res = running ? await window.pa.stop(key) : await window.pa.start(key);
-      toggleBtn.disabled = false;
-      if (!res.ok) toast(`${name}: ${res.error || 'failed'}`);
-      refreshStatus();
-    });
-
-    row.appendChild(dot);
-    row.appendChild(label);
-    row.appendChild(toggleBtn);
-    row.appendChild(restartBtn);
-    serviceListEl.appendChild(row);
-    rowButtons[key] = toggleBtn;
-  }
-}
+let brainState = { remote: false };
 
 function applyStatus(status) {
-  for (const { key } of SERVICE_ROWS) {
-    const running = !!status[key];
-    const dot = document.getElementById(`dot-${key}`);
-    dot.className = `dot ${running ? 'up' : 'down'}`;
-    const btn = rowButtons[key];
-    btn.textContent = running ? 'Stop' : 'Start';
-    btn.dataset.running = running ? '1' : '0';
-  }
-
-  const jarvisUpCount = JARVIS_KEYS.filter((k) => status[k]).length;
-  jarvisToggle.checked = jarvisUpCount === JARVIS_KEYS.length;
-  jarvisToggle.indeterminate = jarvisUpCount > 0 && jarvisUpCount < JARVIS_KEYS.length;
-  jarvisSub.textContent = jarvisUpCount ? 'Running -- say "wake up Jarvis"' : 'Off';
-
+  const running = !!status.voiceWake;
+  jarvisToggle.checked = running;
+  jarvisRestartBtn.disabled = !running;
+  const brainDown = brainState.remote && !brainState.reachable;
+  jarvisSub.textContent = !running ? 'Off' : brainDown ? "Running, but its brain isn't answering" : 'Running -- say "wake up Jarvis"';
+  jarvisSub.classList.toggle('warn', running && brainDown);
   petToggle.checked = !!status.pet;
 }
 
@@ -110,10 +50,17 @@ jarvisSwitch.addEventListener('click', async (e) => {
   e.preventDefault();
   if (jarvisSwitch.classList.contains('busy')) return;
   jarvisSwitch.classList.add('busy');
-  const turningOn = !jarvisToggle.checked || jarvisToggle.indeterminate;
+  const turningOn = !jarvisToggle.checked;
   const res = turningOn ? await window.pa.startJarvis() : await window.pa.stopJarvis();
   jarvisSwitch.classList.remove('busy');
-  toast(res.ok ? `JARVIS ${turningOn ? 'started' : 'stopped'}` : 'JARVIS: some services failed, see status');
+  toast(res.ok ? `JARVIS ${turningOn ? 'started' : 'stopped'}` : "JARVIS didn't respond -- see Open logs");
+  refreshStatus();
+});
+
+jarvisRestartBtn.addEventListener('click', async () => {
+  jarvisRestartBtn.disabled = true;
+  const res = await window.pa.restart('voiceWake');
+  toast(res.ok ? 'JARVIS restarted' : `JARVIS: ${res.error || 'failed'}`);
   refreshStatus();
 });
 
@@ -130,8 +77,8 @@ petSwitch.addEventListener('click', async (e) => {
 
 // --- voice settings --------------------------------------------------
 
-// Piper voices installed in models/piper (English only). Voice + speed live
-// in config/voice.json; JARVIS picks a change up on its next sentence.
+// Piper voices (English only) installed in models/piper -- or on the remote
+// brain when the voice runs there. Voice + speed live in config/voice.json; JARVIS picks a change up on its next sentence.
 const VOICE_LABELS = {
   'en_GB-alan-medium': 'Alan (British)',
   'en_GB-northern_english_male-medium': 'Northern English',
@@ -183,7 +130,49 @@ voiceApplyBtn.addEventListener('click', async () => {
   toast(res.ok ? 'Voice saved' : `Voice: ${res.error || 'failed'}`);
 });
 
-// --- performance / threads --------------------------------------------
+// --- brain: on another computer (Brain card) or on this Mac (Performance) --
+
+const BRAIN_PARTS = ['llm', 'stt', 'tts'];
+const brainCard = document.getElementById('brain-card');
+const threadsCard = document.getElementById('threads-card');
+const brainCheckBtn = document.getElementById('brain-check');
+
+async function refreshBrain() {
+  brainState = await window.pa.getBrain();
+  const modelHere = !brainState.remote || !brainState.services.includes('llm');
+  brainCard.hidden = !brainState.remote;
+  if (threadsCard.hidden && modelHere) loadThreads();
+  threadsCard.hidden = !modelHere;
+  if (!brainState.remote) return;
+
+  const { host, services, reachable, health, ms } = brainState;
+  document.getElementById('brain-dot').className = `dot ${reachable ? 'up' : 'bad'}`;
+  document.getElementById('brain-line').textContent = reachable ? `Connected to ${host} (${ms} ms)` : `Can't reach ${host}`;
+  for (const part of BRAIN_PARTS) {
+    const there = services.includes(part);
+    const dot = document.getElementById(`brain-dot-${part}`);
+    const where = document.getElementById(`brain-where-${part}`);
+    if (!there) {
+      dot.className = 'dot up';
+      where.textContent = 'on this Mac';
+    } else {
+      dot.className = `dot ${!reachable ? 'down' : health[part] ? 'up' : 'bad'}`;
+      where.textContent = !reachable ? 'on the other computer' : health[part] ? 'on the other computer' : 'not running there';
+    }
+  }
+  const hint = document.getElementById('brain-hint');
+  hint.classList.toggle('warn', !reachable);
+  hint.textContent = reachable
+    ? 'This Mac listens, plays sound and shows the pet; the rest runs on the other computer. Keep that one on and awake.'
+    : "Is the other computer on, awake and on the network? JARVIS can't answer until it is.";
+}
+
+brainCheckBtn.addEventListener('click', async () => {
+  brainCheckBtn.disabled = true;
+  await refreshBrain();
+  brainCheckBtn.disabled = false;
+  refreshStatus();
+});
 
 async function loadThreads() {
   const { threads, cpuCount } = await window.pa.getThreads();
@@ -199,9 +188,9 @@ threadsApplyBtn.addEventListener('click', async () => {
     return;
   }
   threadsApplyBtn.disabled = true;
-  await window.pa.setThreads(n);
+  const res = await window.pa.setThreads(n);
   threadsApplyBtn.disabled = false;
-  toast('Saved. Applies next time JARVIS starts.');
+  toast(res.ok ? 'Saved. Applies next time JARVIS starts.' : `Couldn't save: ${res.error || 'failed'}`);
 });
 
 // --- advanced --------------------------------------------------
@@ -222,8 +211,7 @@ document.getElementById('open-screen').addEventListener('click', async () => {
 
 // --- init --------------------------------------------------
 
-buildServiceRows();
-refreshStatus();
+refreshBrain().then(refreshStatus);
 loadVoiceOptions();
-loadThreads();
 setInterval(refreshStatus, 4000);
+setInterval(refreshBrain, 15000);

@@ -55,8 +55,13 @@ def save_config(voice: str | None = None, speed: float | None = None) -> dict:
 
 
 def available_voices() -> list[str]:
-    if remote.enabled("tts") and not PIPER_DIR.exists():
-        return [load_config()["voice"]]
+    if remote.enabled("tts"):  # the voices are the ones installed on the remote brain
+        try:
+            req = urllib.request.Request(remote.url("/voices"), headers=remote.headers())
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                return json.loads(resp.read())["voices"]
+        except Exception:  # noqa: BLE001 -- unreachable, or an older server without /voices
+            return [load_config()["voice"]]
     return sorted(p.stem for p in PIPER_DIR.glob("*.onnx") if p.with_suffix(".onnx.json").exists())
 
 
@@ -76,7 +81,7 @@ def synthesize(text: str, voice: str | None = None, speed: float | None = None) 
     if remote.enabled("tts"):  # the heavy lifting happens on the remote brain
         req = urllib.request.Request(
             remote.url("/tts"), method="POST",
-            data=json.dumps({"text": text, "voice": voice, "speed": speed or cfg.get("speed")}).encode(),
+            data=json.dumps({"text": text, "voice": voice or cfg["voice"], "speed": speed or cfg.get("speed")}).encode(),
             headers={"Content-Type": "application/json", **remote.headers()})
         with urllib.request.urlopen(req, timeout=60) as resp:
             return resp.read()

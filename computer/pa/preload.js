@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('pa', {
   previewVoice: (opts) => ipcRenderer.invoke('pa:preview-voice', opts),
   getThreads: () => ipcRenderer.invoke('pa:get-threads'),
   setThreads: (n) => ipcRenderer.invoke('pa:set-threads', n),
+  getBrain: () => ipcRenderer.invoke('pa:get-brain'),
   openLogs: () => ipcRenderer.invoke('pa:open-logs'),
   openScreen: (autostart) => ipcRenderer.invoke('pa:open-screen', autostart),
   openGoals: () => ipcRenderer.invoke('pa:open-goals'),

@@ -6,6 +6,7 @@ const { exec } = require('node:child_process');
 const store = require('./store');
 const reminders = require('./reminders');
 const goalsWindow = require('./goals-window');
+const brain = require('./brain');
 
 const JARVIS_ROOT = path.join(__dirname, '..', '..');
 const STATE_DIR = path.join(JARVIS_ROOT, 'database', 'pet');
@@ -426,12 +427,22 @@ function checkHealthy(port, urlPath) {
   });
 }
 
+// The model and speech recognition: on this Mac's loopback ports, or on the
+// remote brain (config/remote.json -- see brain.js) for the parts moved there.
+async function modelAndSpeechUp() {
+  const b = await brain.status(1500);
+  const there = (svc) => b.remote && b.services.includes(svc);
+  return Promise.all([
+    there('llm') ? !!b.health.llm : checkHealthy(8080, '/health'),
+    there('stt') ? !!b.health.stt : checkPortUp(8093),
+  ]);
+}
+
 async function gatherPanelData() {
   const { tasks, moreCount } = allOpenTasks(PANEL_MAX_TASKS);
-  const [voiceWake, model, speech] = await Promise.all([
+  const [voiceWake, [model, speech]] = await Promise.all([
     checkServiceUp(SERVICE_LABELS.voiceWake),
-    checkPortUp(8080, '/health'),
-    checkPortUp(8093),
+    modelAndSpeechUp(),
   ]);
   return {
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -758,9 +769,9 @@ function showBoot() {
   const up = { voice: false, speech: false, model: false }; // sticky: a busy moment isn't "down"
   bootTimer = setInterval(async () => {
     // Pet only: nothing else to wait for -- the intro just plays.
-    const [voice, speech, model] = FULL_JARVIS
-      ? await Promise.all([checkPortUp(8094, '/screen/poll'), checkPortUp(8093), checkHealthy(8080, '/health')])
-      : [true, true, true];
+    const [voice, [model, speech]] = FULL_JARVIS
+      ? await Promise.all([checkPortUp(8094, '/screen/poll'), modelAndSpeechUp()])
+      : [true, [true, true]];
     up.voice ||= voice;
     up.speech ||= speech;
     up.model ||= model;

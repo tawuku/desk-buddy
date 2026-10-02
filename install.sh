@@ -4,6 +4,12 @@
 #   ./install.sh             JARVIS + Pet: the local voice assistant ("wake up Jarvis"),
 #                            its full-screen briefing, and the desktop pet
 #   ./install.sh --pet-only  Just the desktop pet: goals, reminders, pop-ups
+#   ./install.sh --remote    JARVIS + Pet as a thin client: the language model,
+#                            speech recognition and the voice run on another
+#                            computer (computer/server/), so nothing heavy is
+#                            downloaded here. Chosen automatically once this Mac
+#                            is connected (config/remote.json); --local forces
+#                            the full local download again.
 #
 # Safe to run again (it updates what's there). Undo with ./uninstall.sh.
 set -euo pipefail
@@ -11,6 +17,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 MODE="full"
 [ "${1:-}" = "--pet-only" ] && MODE="pet"
+# Thin client: which of llm / stt / tts run on the remote brain (so their
+# engines and models aren't needed here).
+REMOTE_PARTS=""
+if [ "${1:-}" = "--remote" ]; then
+  REMOTE_PARTS="llm stt tts"
+elif [ "${1:-}" != "--local" ] && [ -f "$ROOT/config/remote.json" ]; then
+  REMOTE_PARTS="$(python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); print(" ".join(c.get("services", ["llm","stt","tts"])) if c.get("host") and c.get("enabled", True) else "")' "$ROOT/config/remote.json" 2>/dev/null || true)"
+fi
+local_part() { case " $REMOTE_PARTS " in *" $1 "*) return 1 ;; *) return 0 ;; esac; }
 AGENTS="$HOME/Library/LaunchAgents"
 UID_NUM="$(id -u)"
 
@@ -113,10 +128,17 @@ EOF
 fi
 
 # --- 2. JARVIS: engines, Python app, models -----------------------------------
-say "Speech + language engines (Homebrew)"
-have brew || die "Homebrew is needed for JARVIS: https://brew.sh -- then run this again. (Or use ./install.sh --pet-only.)"
-if [ -x "$ROOT/engines/bin/llama-server" ] || have llama-server; then ok "llama.cpp"; else brew install llama.cpp; fi
-if [ -x "$ROOT/engines/bin/whisper-server" ] || have whisper-server; then ok "whisper.cpp"; else brew install whisper-cpp; fi
+if local_part llm || local_part stt; then
+  say "Speech + language engines (Homebrew)"
+  have brew || die "Homebrew is needed for JARVIS: https://brew.sh -- then run this again. (Or use ./install.sh --pet-only.)"
+  if local_part llm; then
+    if [ -x "$ROOT/engines/bin/llama-server" ] || have llama-server; then ok "llama.cpp"; else brew install llama.cpp; fi
+  fi
+  if local_part stt; then
+    if [ -x "$ROOT/engines/bin/whisper-server" ] || have whisper-server; then ok "whisper.cpp"; else brew install whisper-cpp; fi
+  fi
+fi
+[ -z "$REMOTE_PARTS" ] || ok "On the remote brain, not installed here: $REMOTE_PARTS"
 
 say "JARVIS voice app (Python)"
 PY=""
@@ -135,20 +157,30 @@ VENV="$ROOT/computer/voice/venv"
 "$VENV/bin/python3" -c "import openwakeword.utils as u; u.download_models(['hey_jarvis'])" >/dev/null 2>&1 || true
 ok "Python packages + 'hey Jarvis' wake-word model"
 
-say "Models (~1.3 GB, one time)"
-mkdir -p "$ROOT/models/piper"
-download "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf" "$ROOT/models/Qwen3-1.7B-Q4_K_M.gguf"
-download "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin" "$ROOT/models/ggml-base.en.bin"
-download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/en_GB-alan-medium.onnx" "$ROOT/models/piper/en_GB-alan-medium.onnx"
-download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/en_GB-alan-medium.onnx.json" "$ROOT/models/piper/en_GB-alan-medium.onnx.json"
-N=en_GB-northern_english_male-medium
-download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/northern_english_male/medium/$N.onnx" "$ROOT/models/piper/$N.onnx"
-download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/northern_english_male/medium/$N.onnx.json" "$ROOT/models/piper/$N.onnx.json"
+if local_part llm || local_part stt || local_part tts; then
+  say "Models (up to ~1.3 GB, one time)"
+fi
+if local_part llm; then
+  mkdir -p "$ROOT/models"
+  download "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf" "$ROOT/models/Qwen3-1.7B-Q4_K_M.gguf"
+fi
+if local_part stt; then
+  mkdir -p "$ROOT/models"
+  download "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin" "$ROOT/models/ggml-base.en.bin"
+fi
+if local_part tts; then
+  mkdir -p "$ROOT/models/piper"
+  download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/en_GB-alan-medium.onnx" "$ROOT/models/piper/en_GB-alan-medium.onnx"
+  download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/en_GB-alan-medium.onnx.json" "$ROOT/models/piper/en_GB-alan-medium.onnx.json"
+  N=en_GB-northern_english_male-medium
+  download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/northern_english_male/medium/$N.onnx" "$ROOT/models/piper/$N.onnx"
+  download "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/northern_english_male/medium/$N.onnx.json" "$ROOT/models/piper/$N.onnx.json"
+fi
 
 # --- 3. your config ---------------------------------------------------------------
 say "Your settings"
 ENVF="$ROOT/config/.env.local_model"
-if [ ! -f "$ENVF" ]; then
+if local_part llm && [ ! -f "$ENVF" ]; then
   KEY="$(openssl rand -hex 24)"
   sed -e "s|^LLAMA_SERVER_API_KEY=.*|LLAMA_SERVER_API_KEY=$KEY|" "$ROOT/config/local_model.env.example" > "$ENVF"
   grep -q '^LLAMA_SERVER_API_KEY=' "$ENVF" || echo "LLAMA_SERVER_API_KEY=$KEY" >> "$ENVF"
@@ -188,7 +220,7 @@ ok "JARVIS and the pet (start with your Mac; switch off in PA)"
 
 install_bootkey
 
-# PA: the control app (start/stop, voice, threads) in ~/Applications
+# PA: the control app (start/stop, voice, where the brain runs) in ~/Applications
 PA="$HOME/Applications/PA.app"
 mkdir -p "$PA/Contents/MacOS" "$PA/Contents/Resources"
 cat > "$PA/Contents/MacOS/PA" <<EOF
@@ -211,10 +243,17 @@ EOF
 ok "PA control app in ~/Applications"
 
 say "Done!"
+if [ "${1:-}" = "--remote" ] && [ ! -f "$ROOT/config/remote.json" ]; then
+  cat <<'EOF'
+    • One more step: point this Mac at the computer that runs the brain
+      (see computer/server/README.md):
+        bash computer/server/connect.sh <pc-ip> <token>
+EOF
+fi
 cat <<'EOF'
     • JARVIS starts with your Mac and listens for "wake up Jarvis" (the first wake
       after a restart plays the boot intro). Stop/start it in PA
-      (Spotlight: "PA"). First start loads the model (~30 s).
+      (Spotlight: "PA"). On its own, the first start loads the model (~30 s).
     • Then say "wake up Jarvis". Try: "give me an update", "remind me in 10 minutes
       to stretch", "remember that ...", "open my CV", "how did I sleep?"
     • macOS will ask once for the microphone, and later for Notes / Mail /

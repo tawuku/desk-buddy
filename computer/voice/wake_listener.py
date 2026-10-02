@@ -714,6 +714,9 @@ def transcribe(wav_path: Path, prompt: str | None = None) -> str:
     try:
         return _transcribe_server(wav_path, prompt)
     except Exception as exc:  # noqa: BLE001 -- server down: fall back to the CLI
+        if remote.enabled("stt") and not WHISPER_MODEL.exists():
+            log(f"speech recognition on the remote brain failed ({exc!r}); no local Whisper to fall back on")
+            return ""
         log(f"whisper-server unavailable ({exc!r}), using whisper-cli")
     cli = WHISPER_NATIVE_BIN / "whisper-cli"
     result = subprocess.run(
@@ -1371,7 +1374,7 @@ def confirm_wake(frames: list[np.ndarray]) -> bool:
 
 
 def main() -> None:
-    if not WHISPER_MODEL.exists():
+    if not remote.enabled("stt") and not WHISPER_MODEL.exists():
         log(f"FATAL: missing Whisper model at {WHISPER_MODEL}")
         sys.exit(1)
 

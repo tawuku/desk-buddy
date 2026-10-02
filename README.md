@@ -28,6 +28,10 @@ cd desk-buddy
 ./install.sh --pet-only      # just the pet
 # or
 ./install.sh                 # JARVIS + pet
+# or
+./install.sh --remote        # JARVIS + pet as a thin client: the heavy parts run
+                             # on another computer (see computer/server/), so no
+                             # models are downloaded to this Mac
 ```
 
 Remove it again with `./uninstall.sh`.
@@ -63,7 +67,11 @@ Say **"wake up Jarvis"**, then talk. Everything runs locally: wake word
 (openWakeWord), speech recognition (whisper.cpp), a small language model
 (Qwen3 1.7B on llama.cpp) and a natural voice (Piper).
 
-**Run it on a Windows PC instead:** the model, speech recognition and voice can live on a stronger/always-on PC while the Mac only listens and plays audio -- see [computer/server/](computer/server/README.md).
+**Run it on a Windows PC instead:** the model, speech recognition and voice can
+live on a stronger/always-on PC while the Mac only listens and plays audio --
+see [computer/server/](computer/server/README.md). Install the Mac side with
+`./install.sh --remote` and it downloads no models at all; **PA** then shows
+whether the PC is answering and which parts run there.
 
 - "Give me an update" -- a full-screen briefing on all your screens:
   priorities, goals, health, notes, weather, inbox, projects, news.
@@ -107,8 +115,12 @@ While idle, JARVIS waits as a breathing particle orb:
 
 ## Privacy
 
-Everything stays on your Mac. The only network calls are the lookups you ask
-for (weather, news, web search, the one-time model downloads). Your settings,
+By default everything stays on your Mac. The only network calls are the lookups
+you ask for (weather, news, web search, the one-time model downloads). If you
+connect a [brain server](computer/server/README.md), your voice recordings and
+questions go to that computer over your own network -- and if you give that
+server a hosted-model API key, your questions (with the context JARVIS attaches
+to them) go on to that provider. Your settings,
 goals, memories and reminders live in `config/` and `database/`, which are
 never committed.
 

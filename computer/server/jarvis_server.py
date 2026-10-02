@@ -8,6 +8,7 @@ token, to the Mac (which only records, plays audio and draws the pet):
   POST /stt       -> whisper-server 127.0.0.1:8093  (speech -> text)
   POST /tts       -> Piper, in this process         ({"text","voice","speed"} -> WAV)
   GET  /health    -> {"llm": bool, "stt": bool, "tts": bool}
+  GET  /voices    -> {"voices": [...]}  the Piper voices installed here (PA's Voice list)
 
 llama-server and whisper-server stay on the PC's loopback; only this port is
 reachable from the network, and every request needs the token in
@@ -120,6 +121,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             self._send(200, json.dumps({"llm": bool(HOSTED_KEY) or _up(f"{LLM}/health"), "stt": _up(f"{STT}/"),
                                         "tts": bool(tts.available_voices())}).encode(), "application/json")
+        elif self.path == "/voices":
+            self._send(200, json.dumps({"voices": tts.available_voices()}).encode(), "application/json")
         else:
             self._send(404, b"not found", "text/plain")
 

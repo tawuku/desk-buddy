@@ -10,12 +10,33 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CFG="$ROOT/config/remote.json"
 restart() { launchctl kickstart -k "gui/$(id -u)/com.jarvis.voice-wake" 2>/dev/null || true; }
+# A Mac set up as a thin client (./install.sh --remote) has no local models:
+# refuse to move a part back here that it can't run, rather than break JARVIS.
+has_local() {  # llm | stt | tts
+  case "$1" in
+    llm) ls "$ROOT"/models/*.gguf >/dev/null 2>&1 ;;
+    stt) [ -f "$ROOT/models/ggml-base.en.bin" ] ;;
+    tts) ls "$ROOT"/models/piper/*.onnx >/dev/null 2>&1 ;;
+  esac
+}
+need_local() {  # parts that would run on this Mac
+  for part in "$@"; do
+    has_local "$part" || { echo "This Mac has no local files for '$part' -- run ./install.sh --local first to download them." >&2; exit 1; }
+  done
+}
 
 case "${1:-}" in
   off)
+    need_local llm stt tts
     rm -f "$CFG"; restart; echo "Back to running everything on this Mac." ;;
   services)
     [ -f "$CFG" ] || { echo "Not connected yet -- run: connect.sh <pc-ip> <token>" >&2; exit 1; }
+    WANT="$(printf '%s' "${2:-}" | tr 'A-Z' 'a-z')"
+    if [ -n "$WANT" ] && [ "$WANT" != "all" ]; then
+      for part in llm stt tts; do
+        case ",$WANT," in *",$part,"*) ;; *) need_local "$part" ;; esac
+      done
+    fi
     python3 - "$CFG" "${2:?say which: llm | stt | tts (comma-separated), or all}" <<'PY'
 import json, sys
 path, want = sys.argv[1], sys.argv[2].lower()
