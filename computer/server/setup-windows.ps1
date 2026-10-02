@@ -17,10 +17,17 @@ $Engine = Join-Path $Root "engines\win"
 $Models = Join-Path $Root "models"
 New-Item -ItemType Directory -Force $Engine, $Models, (Join-Path $Models "piper"), (Join-Path $Root "logs") | Out-Null
 
+# The progress bar makes Invoke-WebRequest crawl on Windows PowerShell 5.1.
+$ProgressPreference = "SilentlyContinue"
+# Download to a .part file (resumable with curl) and rename when complete, so an
+# interrupted run never leaves a truncated file that looks finished.
 function Get-File($url, $dest) {
   if (Test-Path $dest) { return }
   Write-Host "  downloading $(Split-Path $dest -Leaf)"
-  Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+  $part = "$dest.part"
+  & curl.exe -L --fail --retry 5 --retry-delay 3 -C - -o $part $url
+  if ($LASTEXITCODE -ne 0) { throw "download failed: $url" }
+  Move-Item -Force $part $dest
 }
 # GitHub's "latest" release of these repos often has no Windows files, so take
 # the newest release that does.
@@ -84,10 +91,16 @@ try {
 } catch { Write-Host "  (couldn't add the firewall rule -- re-run this script as Administrator once)" -ForegroundColor Yellow }
 $action  = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PSScriptRoot\start-server.ps1`""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
-Register-ScheduledTask -TaskName "JARVIS brain" -Action $action -Trigger $trigger -Force | Out-Null
-Start-ScheduledTask -TaskName "JARVIS brain"
+try {
+  Register-ScheduledTask -TaskName "JARVIS brain" -Action $action -Trigger $trigger -Force -ErrorAction Stop | Out-Null
+  Start-ScheduledTask -TaskName "JARVIS brain"
+} catch {
+  Write-Host "  (couldn't register the start-at-login task -- re-run as Administrator once; starting the server now instead)" -ForegroundColor Yellow
+  Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass -File `"$PSScriptRoot\start-server.ps1`""
+}
 
-$ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -match "^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\." } | Select-Object -First 1).IPAddress
+# skip Hyper-V/WSL/VM adapters (e.g. 172.x "vEthernet"); the Mac can't reach those
+$ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch "vEthernet|WSL|VirtualBox|VMware|Loopback" -and $_.IPAddress -match "^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\." } | Select-Object -First 1).IPAddress
 Write-Host ""
 Write-Host "Done. Starting now (the first start loads the model, ~1 minute)." -ForegroundColor Green
 Write-Host "On the Mac, run:" -ForegroundColor Green

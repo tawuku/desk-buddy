@@ -70,3 +70,7 @@ computer/pa/node_modules/
 # Remote brain (Windows PC): host/token for the Mac, token for the PC
 config/remote.json
 config/server.json
+
+# Windows engine builds (llama.cpp / whisper.cpp), downloaded by computer/server/setup-windows.ps1
+engines/win/
+computer/voice/venv-win/
