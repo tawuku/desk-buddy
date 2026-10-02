@@ -1096,20 +1096,28 @@ def answer_text(text: str, emit, speak_it: bool = False) -> None:
         messages = _build_messages(text, context)
         pieces: list[str] = []
         shown = ""
-        try:
-            for piece in skills.llm_stream(messages, max_tokens=FAST_MAX_TOKENS + (REPORT_EXTRA_TOKENS if report else 60 if context else 40),
-                                           cancel=lambda: False, stats={}):
-                pieces.append(piece)
-                visible = _BRACKETED.sub("", "".join(pieces))
-                if visible.lstrip().startswith("["):
-                    continue  # an echoed [header] that isn't closed yet -- don't show it
-                visible = visible.lstrip()
-                if len(visible) > len(shown):
-                    emit({"type": "token", "text": visible[len(shown):]})
-                    shown = visible
-        except Exception as exc:  # noqa: BLE001
-            log(f"typed answer failed: {exc!r}")
-            return finish("Sorry, I couldn't get an answer just now -- is the model still loading?", "error")
+        for attempt in range(12):
+            try:
+                for piece in skills.llm_stream(messages, max_tokens=FAST_MAX_TOKENS + (REPORT_EXTRA_TOKENS if report else 60 if context else 40),
+                                               cancel=lambda: False, stats={}):
+                    pieces.append(piece)
+                    visible = _BRACKETED.sub("", "".join(pieces))
+                    if visible.lstrip().startswith("["):
+                        continue  # an echoed [header] that isn't closed yet -- don't show it
+                    visible = visible.lstrip()
+                    if len(visible) > len(shown):
+                        emit({"type": "token", "text": visible[len(shown):]})
+                        shown = visible
+                break
+            except Exception as exc:  # noqa: BLE001
+                # Right after JARVIS starts, the model server answers 401 / 503 /
+                # refuses connections for a few seconds while the model loads.
+                loading = not pieces and attempt < 11 and re.search(r"401|503|refused|URLError", repr(exc))
+                if not loading:
+                    log(f"typed answer failed: {exc!r}")
+                    return finish("Sorry, I couldn't get an answer just now.", "error")
+                emit({"type": "status", "text": "The model is still loading…"})
+                time.sleep(3)
         # Final text: drop stock sign-offs ("What would you like to do next?").
         sentences = re.split(r"(?<=[.!?])\s+", _BRACKETED.sub("", "".join(pieces)).strip())
         reply = " ".join(x for x in sentences if not _FILLER_SENTENCE.match(x.strip())).strip() or shown.strip()

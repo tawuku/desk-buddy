@@ -462,7 +462,7 @@ _KW = {
              r"what did i (write|note|jot)|note (about|on|called)|notes (about|on))\b",
     "health": r"\b(how (did|have) i (sleep|slept)|my sleep|sleep (last night|score)|how many steps|my steps|steps (today|so far)|"
               r"how active|my activity|resting heart|heart rate|calories (burned|today)|exercise minutes|my health)\b",
-    "goals": r"\b(my goals?|goal progress|how am i doing on|am i on track|habits?|who should i call|who (do|should) i call)\b",
+    "goals": r"\b(my goals?|goal progress|how am i doing on|am i on track|my habits?|who should i call|who (do|should) i call)\b",
     "activity": r"\b(what (am|was|have|did) i (been )?(doing|working on|up to|do|work on|change)|"
                 r"(my|the) (computer|mac|screen|laptop)|on (my|the) (computer|mac|screen)|"
                 r"recent(ly)? (files|changed|edited|worked)|(which|what) files|my day so far|"
