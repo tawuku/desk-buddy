@@ -34,5 +34,16 @@ bash computer/server/connect.sh off         # back to everything on the Mac
 The Mac then stops running the model and Whisper locally. If the PC is off,
 JARVIS can't answer -- run `connect.sh off` to go back to local mode.
 
+## Away from home (Tailscale)
+Install [Tailscale](https://tailscale.com) on both the PC and the Mac and sign
+in to the same account. Run `tailscale status` on the Mac to find the PC's
+`100.x.x.x` address, then use it as `<pc-ip>` above. It works at home and
+away, so you don't need to switch back and forth. If the Mac can't reach the PC,
+allow port 8090 from `100.64.0.0/10` in the PC's Windows firewall:
+
+```powershell
+New-NetFirewallRule -DisplayName "JARVIS brain (Tailscale)" -Direction Inbound -Protocol TCP -LocalPort 8090 -RemoteAddress 100.64.0.0/10 -Action Allow
+```
+
 Files: `config/server.json` (PC) and `config/remote.json` (Mac) hold the token
 and are git-ignored. Logs on the PC: `logs\server.log`, `llama.err.log`.
