@@ -37,6 +37,8 @@ function Get-Asset($repo, $pattern) {
   throw "no release of $repo has a file matching $pattern"
 }
 function Get-Zip($repo, $pattern, $into) {
+  # already unpacked (a running server keeps its DLLs locked, so don't re-extract)
+  if (Get-ChildItem -Recurse $into -Filter "*-server.exe" -ErrorAction SilentlyContinue) { return }
   $a = Get-Asset $repo $pattern
   $zip = Join-Path $env:TEMP $a.name
   Get-File $a.browser_download_url $zip
