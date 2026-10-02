@@ -55,7 +55,7 @@ def save_config(voice: str | None = None, speed: float | None = None) -> dict:
 
 
 def available_voices() -> list[str]:
-    if remote.enabled() and not PIPER_DIR.exists():
+    if remote.enabled("tts") and not PIPER_DIR.exists():
         return [load_config()["voice"]]
     return sorted(p.stem for p in PIPER_DIR.glob("*.onnx") if p.with_suffix(".onnx.json").exists())
 
@@ -73,7 +73,7 @@ def synthesize(text: str, voice: str | None = None, speed: float | None = None) 
     """WAV bytes for text. speed > 1 talks faster (Piper's length_scale is
     the inverse: duration multiplier)."""
     cfg = load_config()
-    if remote.enabled():  # the heavy lifting happens on the remote brain
+    if remote.enabled("tts"):  # the heavy lifting happens on the remote brain
         req = urllib.request.Request(
             remote.url("/tts"), method="POST",
             data=json.dumps({"text": text, "voice": voice, "speed": speed or cfg.get("speed")}).encode(),

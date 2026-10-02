@@ -291,7 +291,7 @@ def world(src: dict) -> dict:
 
 
 def _port_up(port: int, path: str = "/") -> bool:
-    if remote.enabled() and port in (8080, 8093):  # model + speech live on the remote brain
+    if remote.enabled("llm" if port == 8080 else "stt") and port in (8080, 8093):  # that part lives on the remote brain
         try:
             req = urllib.request.Request(remote.url("/health"), headers=remote.headers())
             return bool(json.loads(urllib.request.urlopen(req, timeout=2).read()).get("llm" if port == 8080 else "stt"))

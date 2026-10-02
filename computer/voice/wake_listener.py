@@ -614,7 +614,7 @@ def start_whisper_server() -> None:
     """Start the resident whisper-server as a child of this process (unless
     one is already answering on the port, e.g. left from a previous run)."""
     global _whisper_server
-    if remote.enabled():
+    if remote.enabled("stt"):
         log("speech recognition runs on the remote brain")
         return
     server_bin = WHISPER_NATIVE_BIN / "whisper-server"
@@ -647,7 +647,7 @@ def start_llama_server() -> None:
     """Start the local model server as a child (unless one already answers
     on the port). mlock keeps macOS from compressing the model's memory --
     that was a 20x slowdown before."""
-    if remote.enabled():
+    if remote.enabled("llm"):
         log("the language model runs on the remote brain")
         return
     try:
@@ -698,9 +698,9 @@ def _transcribe_server(wav_path: Path, prompt: str) -> str:
     )
     parts.append(f"--{boundary}--\r\n".encode())
     req = urllib.request.Request(
-        remote.url("/stt") if remote.enabled() else WHISPER_SERVER_URL,
+        remote.url("/stt") if remote.enabled("stt") else WHISPER_SERVER_URL,
         data=b"".join(parts),
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}", **remote.headers()},
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}", **(remote.headers() if remote.enabled("stt") else {})},
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
@@ -1328,7 +1328,7 @@ def warm_model() -> None:
     real question only has to read its own few tokens."""
     for _ in range(120):
         try:
-            if remote.enabled():
+            if remote.enabled("llm"):
                 urllib.request.urlopen(urllib.request.Request(remote.url("/health"), headers=remote.headers()), timeout=2)
             else:
                 urllib.request.urlopen(f"http://127.0.0.1:{LLAMA_PORT}/health", timeout=2)

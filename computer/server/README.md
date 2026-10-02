@@ -28,6 +28,8 @@ Set the PC's sleep to "Never" while plugged in.
 ## 2. On the Mac
 ```bash
 bash computer/server/connect.sh <pc-ip> <token>
+bash computer/server/connect.sh services llm   # slow PC? only the language model runs there;
+                                               # speech recognition + voice stay on the Mac
 bash computer/server/connect.sh status      # is it reachable?
 bash computer/server/connect.sh off         # back to everything on the Mac
 ```

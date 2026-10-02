@@ -3,11 +3,17 @@ Remote brain: run JARVIS's heavy parts (the language model, Whisper speech
 recognition and the Piper voice) on another computer -- see computer/server/.
 
 config/remote.json (git-ignored; written by computer/server/connect.sh):
-  {"host": "192.168.1.50", "port": 8090, "token": "..."}
+  {"host": "192.168.1.50", "port": 8090, "token": "...", "services": ["llm"]}
 
 With the file present, this Mac only records the mic, plays audio and shows
 the pet/screen; with it absent (or "enabled": false) everything runs locally
 exactly as before.
+
+"services" picks which parts move: "llm" (the language model -- the heavy
+one, ~1.5 GB of RAM), "stt" (speech recognition), "tts" (the voice). Left
+out, all three do. On a slow server keep stt and tts on the Mac: they take
+well under a second here, run for every wake-word check and every sentence,
+and would otherwise queue up in front of the model on the server.
 """
 from __future__ import annotations
 
@@ -25,8 +31,15 @@ def _cfg() -> dict:
     return cfg if cfg.get("host") and cfg.get("enabled", True) else {}
 
 
-def enabled() -> bool:
-    return bool(_cfg())
+SERVICES = ("llm", "stt", "tts")
+
+
+def enabled(service: str | None = None) -> bool:
+    """Is the remote brain used -- at all, or for this service?"""
+    cfg = _cfg()
+    if not cfg:
+        return False
+    return service is None or service in cfg.get("services", SERVICES)
 
 
 def url(path: str) -> str:

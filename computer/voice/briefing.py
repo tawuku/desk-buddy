@@ -33,7 +33,7 @@ def main() -> int:
         log("today's briefing already prepared, nothing to do")
         return 0
     try:
-        if remote.enabled():
+        if remote.enabled("llm"):
             urllib.request.urlopen(urllib.request.Request(remote.url("/health"), headers=remote.headers()), timeout=3)
         else:
             urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=3)

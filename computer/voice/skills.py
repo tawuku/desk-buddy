@@ -63,11 +63,11 @@ def _strip_tags(s: str) -> str:
 # --- LLM -----------------------------------------------------------------
 
 def _chat_url() -> str:
-    return remote.url("/llm/v1/chat/completions") if remote.enabled() else LLAMA_CHAT_URL
+    return remote.url("/llm/v1/chat/completions") if remote.enabled("llm") else LLAMA_CHAT_URL
 
 
 def _auth_headers() -> dict:
-    if remote.enabled():
+    if remote.enabled("llm"):
         return remote.headers()
     return {"Authorization": f"Bearer {_api_key()}"}
 
