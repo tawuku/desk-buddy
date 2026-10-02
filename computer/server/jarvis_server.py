@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -34,6 +35,12 @@ TOKEN = CONFIG["token"]
 PORT = int(CONFIG.get("port", 8090))
 LLM_KEY = CONFIG.get("llm_api_key", "")
 LLM = "http://127.0.0.1:8080"
+# Hosted model instead of the local llama-server: set JARVIS_LLM_API_KEY in the
+# environment (never in a file). JARVIS_LLM_URL / JARVIS_LLM_MODEL override the defaults.
+HOSTED_KEY = os.environ.get("JARVIS_LLM_API_KEY", "")
+HOSTED_URL = os.environ.get("JARVIS_LLM_URL", "https://api.anthropic.com/v1/chat/completions")
+HOSTED_MODEL = os.environ.get("JARVIS_LLM_MODEL", "claude-haiku-4-5-20251001")
+LLAMA_ONLY_KEYS = ("cache_prompt", "chat_template_kwargs")
 STT = "http://127.0.0.1:8093"
 
 
@@ -67,12 +74,20 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _proxy(self, target: str) -> None:
+    def _proxy(self, target: str, hosted: bool = False) -> None:
         length = int(self.headers.get("Content-Length") or 0)
+        data = self.rfile.read(length)
         headers = {"Content-Type": self.headers.get("Content-Type", "application/json")}
-        if LLM_KEY and target.startswith(LLM):
+        if hosted:
+            body = json.loads(data or b"{}")
+            body["model"] = HOSTED_MODEL
+            for key in LLAMA_ONLY_KEYS:
+                body.pop(key, None)
+            data = json.dumps(body).encode()
+            headers["Authorization"] = f"Bearer {HOSTED_KEY}"
+        elif LLM_KEY and target.startswith(LLM):
             headers["Authorization"] = f"Bearer {LLM_KEY}"  # only if llama-server was started with --api-key
-        req = urllib.request.Request(target, data=self.rfile.read(length), method="POST", headers=headers)
+        req = urllib.request.Request(target, data=data, method="POST", headers=headers)
         try:
             upstream = urllib.request.urlopen(req, timeout=300)
         except urllib.error.HTTPError as exc:
@@ -103,7 +118,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed():
             return
         if self.path == "/health":
-            self._send(200, json.dumps({"llm": _up(f"{LLM}/health"), "stt": _up(f"{STT}/"),
+            self._send(200, json.dumps({"llm": bool(HOSTED_KEY) or _up(f"{LLM}/health"), "stt": _up(f"{STT}/"),
                                         "tts": bool(tts.available_voices())}).encode(), "application/json")
         else:
             self._send(404, b"not found", "text/plain")
@@ -111,7 +126,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         if not self._authed():
             return
-        if self.path.startswith("/llm/"):
+        if HOSTED_KEY and self.path == "/llm/v1/chat/completions":
+            self._proxy(HOSTED_URL, hosted=True)
+        elif self.path.startswith("/llm/"):
             self._proxy(LLM + self.path[4:])
         elif self.path == "/stt":
             self._proxy(f"{STT}/inference")
